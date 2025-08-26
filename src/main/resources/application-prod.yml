@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: ${DB_URL}          # 예: jdbc:mysql://mysql:3306/appdb?useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USER}
+    password: ${DB_PASS}
+  jpa:
+    hibernate:
+      ddl-auto: validate    # 운영은 validate로 고정 (권장: Flyway와 함께 사용)
