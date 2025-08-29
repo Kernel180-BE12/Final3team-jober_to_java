@@ -6,3 +6,6 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate    # 운영은 validate로 고정 (권장: Flyway와 함께 사용)
+  flyway:
+    enabled: true
+    locations: classpath:db/migration,classpath:db/seed
