@@ -20,6 +20,4 @@ services:
       timeout: 3s
       retries: 20
     volumes:
-      - dbdata:/var/lib/mysql
-volumes:
-  dbdata:
+      - ./dbdata:/var/lib/mysql
