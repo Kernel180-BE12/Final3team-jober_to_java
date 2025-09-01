@@ -4,8 +4,10 @@ import com.example.final_projects.dto.PageResponse;
 import com.example.final_projects.dto.template.TemplateResponse;
 import com.example.final_projects.security.CustomUserPrincipal;
 import com.example.final_projects.service.TemplateService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,5 +28,14 @@ public class TemplateController {
             @RequestParam String status
     ) {
         return templateService.getTemplates(principal.getId(), status, page, size);
+    }
+
+    @GetMapping("/api/templates/{id}")
+    public ResponseEntity<TemplateResponse> getTemplateById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserPrincipal principal
+    ) {
+        TemplateResponse response = templateService.getTemplateById(id, principal.getId());
+        return ResponseEntity.ok(response);
     }
 }

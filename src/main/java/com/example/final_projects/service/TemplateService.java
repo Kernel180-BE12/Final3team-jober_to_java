@@ -7,6 +7,7 @@ import com.example.final_projects.entity.TemplateStatus;
 import com.example.final_projects.repository.TemplateRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,16 @@ public class TemplateService {
                 .collect(Collectors.toList());
 
         return new PageResponse<>(data, page, size, templatePage.getTotalElements());
+    }
+
+    public TemplateResponse getTemplateById(Long templateId, Long userId) {
+        Template template = templateRepository.findById(templateId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않습니다"));
+
+        if (template.getUserId() == null || !template.getUserId().equals(userId)) {
+            throw new AccessDeniedException("권한이 없습니다");
+        }
+        return toResponse(template);
     }
 
     private TemplateResponse toResponse(Template template) {
