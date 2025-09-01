@@ -1,7 +1,6 @@
 package com.example.final_projects.entity;
 
 import jakarta.persistence.*;
-import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 
