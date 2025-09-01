@@ -31,3 +31,17 @@ build/
 
 ### VS Code ###
 .vscode/
+.DS_Store
+*.iml
+.idea/
+.vscode/
+target/
+build/
+.gradle/
+out/
+logs/
+*.log
+dbdata/
+mysql/
+*.pid
+*.sock
