@@ -53,10 +53,10 @@ public class TemplateService {
         this.purposeRepository = purposeRepository;
     }
 
-    public PageResponse<TemplateResponse> getTemplates(Long userId, String status, int page, int size) {
+    public PageResponse<TemplateResponse> getTemplates(Long userId, TemplateStatus status, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page - 1, size);
 
-        Page<Template> templatePage = templateRepository.findByUserIdAndStatus(userId, TemplateStatus.valueOf(status), pageRequest);
+        Page<Template> templatePage = templateRepository.findByUserIdAndStatus(userId, status, pageRequest);
 
         List<TemplateResponse> data = templatePage.getContent().stream()
                 .map(TemplateResponse::from)

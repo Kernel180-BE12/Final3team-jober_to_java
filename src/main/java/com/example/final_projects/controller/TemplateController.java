@@ -3,8 +3,10 @@ package com.example.final_projects.controller;
 import com.example.final_projects.dto.PageResponse;
 import com.example.final_projects.dto.template.TemplateCreateRequest;
 import com.example.final_projects.dto.template.TemplateResponse;
+import com.example.final_projects.dto.template.TemplateSearchRequest;
 import com.example.final_projects.security.CustomUserPrincipal;
 import com.example.final_projects.service.TemplateService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -22,11 +24,9 @@ public class TemplateController {
     @GetMapping
     public PageResponse<TemplateResponse> getTemplates(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @RequestParam int page,
-            @RequestParam int size,
-            @RequestParam String status
+            @Valid @ModelAttribute TemplateSearchRequest request
     ) {
-        return templateService.getTemplates(principal.getId(), status, page, size);
+        return templateService.getTemplates(principal.getId(), request.validateStatus(), request.getPage(), request.getSize());
     }
 
     @GetMapping("/{id}")
