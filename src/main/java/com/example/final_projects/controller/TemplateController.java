@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@RequestMapping("api/templates")
 public class TemplateController {
 
     private final TemplateService templateService;
@@ -18,7 +19,7 @@ public class TemplateController {
         this.templateService = templateService;
     }
 
-    @GetMapping("/api/templates")
+    @GetMapping
     public PageResponse<TemplateResponse> getTemplates(
             @AuthenticationPrincipal CustomUserPrincipal principal,
             @RequestParam int page,
@@ -28,7 +29,7 @@ public class TemplateController {
         return templateService.getTemplates(principal.getId(), status, page, size);
     }
 
-    @GetMapping("/api/templates/{id}")
+    @GetMapping("/{id}")
     public ResponseEntity<TemplateResponse> getTemplateById(
             @PathVariable Long id,
             @AuthenticationPrincipal CustomUserPrincipal principal
@@ -37,7 +38,7 @@ public class TemplateController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("api/templates")
+    @PostMapping
     public ResponseEntity<TemplateResponse> createTemplate(
             @AuthenticationPrincipal CustomUserPrincipal principal,
             @RequestBody TemplateCreateRequest templateCreateRequest
