@@ -1,15 +1,13 @@
 package com.example.final_projects.controller;
 
 import com.example.final_projects.dto.PageResponse;
+import com.example.final_projects.dto.template.TemplateCreateRequest;
 import com.example.final_projects.dto.template.TemplateResponse;
 import com.example.final_projects.security.CustomUserPrincipal;
 import com.example.final_projects.service.TemplateService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class TemplateController {
@@ -36,6 +34,15 @@ public class TemplateController {
             @AuthenticationPrincipal CustomUserPrincipal principal
     ) {
         TemplateResponse response = templateService.getTemplateById(id, principal.getId());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("api/templates")
+    public ResponseEntity<TemplateResponse> createTemplate(
+            @AuthenticationPrincipal CustomUserPrincipal principal,
+            @RequestBody TemplateCreateRequest templateCreateRequest
+    ) {
+        TemplateResponse response = templateService.createTemplate(principal.getId(), templateCreateRequest);
         return ResponseEntity.ok(response);
     }
 }
