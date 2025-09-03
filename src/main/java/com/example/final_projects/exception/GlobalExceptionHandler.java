@@ -45,4 +45,12 @@ public class GlobalExceptionHandler {
                 ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Unexpected Error", ex.getMessage())
         );
     }
+
+    @ExceptionHandler(TemplateException.class)
+    public ResponseEntity<ErrorResponse> handleTemplateException(TemplateException ex) {
+        ErrorReason reason = ex.getErrorCode().getErrorReason();
+        return ResponseEntity
+                .status(reason.getStatus())
+                .body(ErrorResponse.of(reason.getStatus(), "Error", reason.getMessage()));
+    }
 }

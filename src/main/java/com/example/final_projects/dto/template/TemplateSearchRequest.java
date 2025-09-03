@@ -2,6 +2,8 @@ package com.example.final_projects.dto.template;
 
 import com.example.final_projects.dto.PageRequest;
 import com.example.final_projects.entity.TemplateStatus;
+import com.example.final_projects.exception.TemplateException;
+import com.example.final_projects.exception.code.TemplateErrorCode;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,11 +24,13 @@ public class TemplateSearchRequest extends PageRequest {
         try {
             templateStatus = TemplateStatus.valueOf(status);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("잘못된 status 값입니다: " + status);
+            throw new TemplateException(TemplateErrorCode.INVALID_STATUS);
         }
+
         if (!ALLOWED_STATUSES.contains(templateStatus)) {
-            throw new IllegalArgumentException("허용되지 않은 status 값입니다: " + status);
+            throw new TemplateException(TemplateErrorCode.FORBIDDEN_STATUS);
         }
+
         return templateStatus;
     }
 }
