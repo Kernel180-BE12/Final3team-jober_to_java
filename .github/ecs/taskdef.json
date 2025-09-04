@@ -1,0 +1,44 @@
+{
+  "family": "jober-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::808605954528:role/ecsTaskExecutionRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "808605954528.dkr.ecr.ap-northeast-2.amazonaws.com/final_jober:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 8080, "hostPort": 8080, "protocol": "tcp", "appProtocol": "http", "name": "app-8080-tcp" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/app",
+          "awslogs-create-group": "true",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "environment": [
+        { "name": "SPRING_DATASOURCE_URL", "value": "jdbc:mysql://database-1.cnkq8ge2kzw1.ap-northeast-2.rds.amazonaws.com:3364/final_team_3_dev?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&serverTimezone=UTC" },
+        { "name": "SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT", "value": "0" },
+        { "name": "SPRING_JPA_HIBERNATE_DDL_AUTO", "value": "none" },
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
+        { "name": "SPRING_FLYWAY_BASELINE_ON_MIGRATE", "value": "true" },
+        { "name": "SPRING_FLYWAY_ENABLED", "value": "true" },
+        { "name": "SPRING_DATASOURCE_USERNAME", "value": "jjadmin" }
+      ],
+      "secrets": [
+        { "name": "SPRING_DATASOURCE_PASSWORD", "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:808605954528:secret:dbpassword-0AXukx:password::" }
+      ]
+    }
+  ],
+  "volumes": []
+}

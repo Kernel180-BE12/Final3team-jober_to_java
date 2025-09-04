@@ -21,6 +21,9 @@ jobs:
       ECR_REGISTRY: "808605954528.dkr.ecr.ap-northeast-2.amazonaws.com"
       ECR_REPOSITORY: "final_jober"
       IMAGE_TAG: "${{ github.sha }}"   # 커밋 SHA로도 태깅
+      ECS_CLUSTER: "final_jober"
+      ECS_SERVICE: "arn:aws:ecs:ap-northeast-2:808605954528:service/final_jober/app-service-amyzs0hv"
+      CONTAINER_NAME: "app"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,11 +50,18 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # (선택) 태스크 정의가 :latest를 쓰고 있다면 force-new-deployment만으로 새 이미지를 당겨옵니다.
-      - name: Update ECS service
-        run: |
-          aws ecs update-service \
-            --cluster final_jober \
-            --service final_jober-service \
-            --force-new-deployment \
-            --region $AWS_REGION
+      - name: Render task definition (replace image)
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: .github/ecs/taskdef.json
+          container-name: ${{ env.CONTAINER_NAME }}            # app
+          image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+      - name: Deploy to ECS (register new revision and update service)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}                      # ARN 사용
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
