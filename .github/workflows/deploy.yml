@@ -3,10 +3,24 @@ name: Deploy to ECS
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ap-northeast-2
+      ACCOUNT_ID: "808605954528"
+      ECR_REGISTRY: "808605954528.dkr.ecr.ap-northeast-2.amazonaws.com"
+      ECR_REPOSITORY: "final_jober"
+      IMAGE_TAG: "${{ github.sha }}"   # 커밋 SHA로도 태깅
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -15,23 +29,29 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::808605954528:role/GitHubActionsECSDeployer
-          aws-region: ap-northeast-2
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify caller identity (STS)
+        run: aws sts get-caller-identity
 
       - name: Log in to Amazon ECR
         run: |
-          aws ecr get-login-password --region ap-northeast-2 \
-            | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com
+          aws ecr get-login-password --region $AWS_REGION \
+            | docker login --username AWS --password-stdin $ECR_REGISTRY
 
       - name: Build, tag, and push image
         run: |
-          docker build -t final_jober .
-          docker tag final_jober:latest <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/final_jober:latest
-          docker push <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/final_jober:latest
+          docker build -t $ECR_REPOSITORY .
+          docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
+      # (선택) 태스크 정의가 :latest를 쓰고 있다면 force-new-deployment만으로 새 이미지를 당겨옵니다.
       - name: Update ECS service
         run: |
           aws ecs update-service \
             --cluster final_jober \
             --service final_jober-service \
             --force-new-deployment \
-            --region ap-northeast-2
+            --region $AWS_REGION
