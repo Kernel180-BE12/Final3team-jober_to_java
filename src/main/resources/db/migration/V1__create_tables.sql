@@ -72,14 +72,25 @@ CREATE TABLE audit_log (
                            CONSTRAINT PK_AUDIT_LOG PRIMARY KEY (id)
 );
 
+CREATE TABLE user_template_request (
+                                       id BIGINT NOT NULL AUTO_INCREMENT,
+                                       user_id BIGINT NOT NULL,
+                                       request_content LONGTEXT NOT NULL,
+                                       status ENUM('PENDING','COMPLETED','FAILED') NOT NULL DEFAULT 'PENDING',
+                                       error_message VARCHAR(500) NULL,
+                                       created_at TIMESTAMP NOT NULL,
+                                       updated_at TIMESTAMP NOT NULL,
+                                       CONSTRAINT PK_USER_TEMPLATE_REQUEST PRIMARY KEY (id)
+);
+
 CREATE TABLE template (
                           id BIGINT NOT NULL AUTO_INCREMENT,
                           user_id BIGINT NOT NULL,
                           category_id BIGINT NOT NULL,
+                          user_template_request_id BIGINT NULL,
                           title VARCHAR(255) NULL,
                           content LONGTEXT NULL,
-                          request_content TEXT NULL,
-                          status ENUM('CREATE_REQUESTED','CREATED','APPROVE_REQUESTED','APPROVED','REJECTED','FAILED','DELETED') NULL,
+                          status ENUM('CREATED','APPROVE_REQUESTED','APPROVED','REJECTED','DELETED') NULL,
                           type ENUM('LINK','MESSAGE','DOCUMENT') NULL,
                           is_public BOOLEAN NULL,
                           image_url VARCHAR(500) NULL,
@@ -87,7 +98,8 @@ CREATE TABLE template (
                           reject_reason_summary VARCHAR(500) NULL,
                           created_at TIMESTAMP NULL,
                           updated_at TIMESTAMP NULL,
-                          CONSTRAINT PK_TEMPLATE PRIMARY KEY (id)
+                          CONSTRAINT PK_TEMPLATE PRIMARY KEY (id),
+                          CONSTRAINT FK_TEMPLATE_REQUEST FOREIGN KEY (user_template_request_id) REFERENCES user_template_request(id)
 );
 
 CREATE TABLE template_variable (
@@ -115,9 +127,10 @@ CREATE TABLE template_button (
 CREATE TABLE template_history (
                                   id BIGINT NOT NULL AUTO_INCREMENT,
                                   template_id BIGINT NOT NULL,
-                                  status ENUM('CREATE_REQUESTED','CREATED','APPROVE_REQUESTED','APPROVED','REJECTED','FAILED','DELETED') NULL,
+                                  status ENUM('CREATED','APPROVE_REQUESTED','APPROVED','REJECTED','DELETED') NULL,
                                   created_at TIMESTAMP NULL,
-                                  CONSTRAINT PK_TEMPLATE_HISTORY PRIMARY KEY (id)
+                                  CONSTRAINT PK_TEMPLATE_HISTORY PRIMARY KEY (id),
+                                  CONSTRAINT FK_TEMPLATE_HISTORY FOREIGN KEY (template_id) REFERENCES template(id)
 );
 
 CREATE TABLE category (
