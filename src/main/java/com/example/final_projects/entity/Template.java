@@ -29,13 +29,14 @@ public class Template {
     @Column(name = "category_id", nullable = false)
     private Long categoryId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_template_request_id")
+    private UserTemplateRequest userTemplateRequest;
+
     private String title;
 
     @Lob
     private String content;
-
-    @Column(name = "request_content")
-    private String requestContent;
 
     @Enumerated(EnumType.STRING)
     private TemplateStatus status;
@@ -59,12 +60,15 @@ public class Template {
     private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<TemplateVariable> variables = new ArrayList<>();
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<TemplateButton> buttons = new ArrayList<>();
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<TemplateHistory> histories = new ArrayList<>();
 
     @ManyToMany
@@ -73,6 +77,7 @@ public class Template {
             joinColumns = @JoinColumn(name = "template_id"),
             inverseJoinColumns = @JoinColumn(name = "industry_id")
     )
+    @Builder.Default
     private Set<Industry> industries = new HashSet<>();
 
     @ManyToMany
@@ -81,7 +86,19 @@ public class Template {
             joinColumns = @JoinColumn(name = "template_id"),
             inverseJoinColumns = @JoinColumn(name = "purpose_id")
     )
+    @Builder.Default
     private Set<Purpose> purposes = new HashSet<>();
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 
     public void updateFromAi(AiTemplateResponse ai) {
         this.categoryId = ai.categoryId();
