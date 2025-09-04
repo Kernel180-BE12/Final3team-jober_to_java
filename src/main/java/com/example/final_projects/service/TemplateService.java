@@ -26,8 +26,7 @@ public class TemplateService {
     private final RestClient restClient;
     private final TemplateButtonRepository templateButtonRepository;
     private final TemplateVariableRepository templateVariableRepository;
-    private final TemplateIndustryRepository templateIndustryRepository;
-    private final TemplatePurposeRepository templatePurposeRepository;
+    private final UserTemplateRequestRepository userTemplateRequestRepository;
     private final IndustryRepository industryRepository;
     private final PurposeRepository purposeRepository;
 
@@ -37,8 +36,7 @@ public class TemplateService {
             RestClient restClient,
             TemplateButtonRepository templateButtonRepository,
             TemplateVariableRepository templateVariableRepository,
-            TemplateIndustryRepository templateIndustryRepository,
-            TemplatePurposeRepository templatePurposeRepository,
+            UserTemplateRequestRepository userTemplateRequestRepository,
             IndustryRepository industryRepository,
             PurposeRepository purposeRepository
     ) {
@@ -47,8 +45,7 @@ public class TemplateService {
         this.restClient = restClient;
         this.templateButtonRepository = templateButtonRepository;
         this.templateVariableRepository = templateVariableRepository;
-        this.templateIndustryRepository = templateIndustryRepository;
-        this.templatePurposeRepository = templatePurposeRepository;
+        this.userTemplateRequestRepository = userTemplateRequestRepository;
         this.industryRepository = industryRepository;
         this.purposeRepository = purposeRepository;
     }
@@ -77,102 +74,106 @@ public class TemplateService {
 
     @Transactional
     public TemplateResponse createTemplate(Long userId, TemplateCreateRequest request) {
-        Template template = Template.builder()
+        UserTemplateRequest userRequest = UserTemplateRequest.builder()
                 .userId(userId)
                 .requestContent(request.getRequestContent())
-                .status(TemplateStatus.CREATE_REQUESTED)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .status(UserTemplateRequestStatus.PENDING)
                 .build();
-        templateRepository.save(template);
+        userTemplateRequestRepository.save(userRequest);
 
-        templateHistoryRepository.save(
-                TemplateHistory.builder()
-                        .template(template)
-                        .status(TemplateStatus.CREATE_REQUESTED)
-                        .createdAt(LocalDateTime.now())
-                        .build()
-        );
+        String aiUrl = "http://3.38.180.216:8000/ai/templates";
+        AiTemplateResponse aiResponse;
+        try {
+            aiResponse = restClient.post()
+                    .uri(aiUrl)
+                    .body(new AiTemplateRequest(
+                            userId,
+                            request.getRequestContent()))
+                    .retrieve()
+                    .body(AiTemplateResponse.class);
 
-        String aiUrl = "http://fastapi-server:8000/ai/templates";
-        AiTemplateResponse aiResponse = restClient.post()
-                .uri(aiUrl)
-                .body(new AiTemplateRequest(userId, request.getRequestContent()))
-                .retrieve()
-                .body(AiTemplateResponse.class);
+            if (aiResponse == null) {
+                throw new IllegalStateException("AI 서버 응답이 없습니다");
+            }
 
-        if (aiResponse == null) {
-            throw new IllegalStateException("AI 서버 응답이 없습니다");
-        }
+            Template template = Template.builder()
+                    .userId(userId)
+                    .categoryId(aiResponse.categoryId())
+                    .title(aiResponse.title())
+                    .content(aiResponse.content())
+                    .imageUrl(aiResponse.imageUrl())
+                    .type(TemplateType.valueOf(aiResponse.type()))
+                    .isPublic(aiResponse.isPublic())
+                    .status(TemplateStatus.CREATED)
+                    .userTemplateRequest(userRequest)
+                    .build();
+            templateRepository.save(template);
 
-        template.updateFromAi(aiResponse);
+            if (aiResponse.buttons() != null) {
+                aiResponse.buttons().forEach(b ->
+                        templateButtonRepository.save(
+                                TemplateButton.builder()
+                                        .template(template)
+                                        .name(b.name())
+                                        .ordering(b.ordering())
+                                        .linkPc(b.linkPc())
+                                        .linkAnd(b.linkAnd())
+                                        .linkIos(b.linkIos())
+                                        .createdAt(LocalDateTime.now())
+                                        .build()
+                        ));
+            }
 
-        if (aiResponse.buttons() != null) {
-            aiResponse.buttons().forEach(b -> templateButtonRepository.save(
-                    TemplateButton.builder()
-                            .template(template)
-                            .name(b.name())
-                            .ordering(b.ordering())
-                            .linkPc(b.linkPc())
-                            .linkAnd(b.linkAnd())
-                            .linkIos(b.linkIos())
-                            .createdAt(LocalDateTime.now())
-                            .build()
-            ));
-        }
-
-        if (aiResponse.variables() != null) {
-            aiResponse.variables().forEach(v -> templateVariableRepository.save(
-                    TemplateVariable.builder()
+            if (aiResponse.variables() != null) {
+                aiResponse.variables().forEach(v -> {
+                    TemplateVariable variable = TemplateVariable.builder()
                             .template(template)
                             .variableKey(v.variableKey())
                             .placeholder(v.placeholder())
                             .inputType(v.inputType())
                             .createdAt(LocalDateTime.now())
+                            .build();
+                    templateVariableRepository.save(variable);
+                    template.getVariables().add(variable);
+                });
+            }
+
+            if (aiResponse.industries() != null) {
+                for (var i : aiResponse.industries()) {
+                    Industry industry = industryRepository.findById(i.id())
+                            .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + i.id()));
+                    template.getIndustries().add(industry);
+                }
+            }
+
+            if (aiResponse.purposes() != null) {
+                for (var p : aiResponse.purposes()) {
+                    Purpose purpose = purposeRepository.findById(p.id())
+                            .orElseThrow(() -> new IllegalArgumentException("Purpose not found: " + p.id()));
+                    template.getPurposes().add(purpose);
+                }
+            }
+
+            templateRepository.save(template);
+            templateHistoryRepository.save(
+                    TemplateHistory.builder()
+                            .template(template)
+                            .status(TemplateStatus.CREATED)
+                            .createdAt(LocalDateTime.now())
                             .build()
-            ));
+            );
+
+            userRequest.setStatus(UserTemplateRequestStatus.COMPLETED);
+            userTemplateRequestRepository.save(userRequest);
+
+            return TemplateResponse.from(template);
+
+        } catch (Exception e) {
+            userRequest.setStatus(UserTemplateRequestStatus.FAILED);
+            userRequest.setErrorMessage(e.getMessage());
+            userTemplateRequestRepository.save(userRequest);
+
+            throw e;
         }
-
-        if (aiResponse.industries() != null) {
-            for (var i : aiResponse.industries()) {
-                Industry industry = industryRepository.findById(i.id())
-                        .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + i.id()));
-                template.getIndustries().add(industry);
-                templateIndustryRepository.save(
-                        TemplateIndustry.builder()
-                                .template(template)
-                                .industryId(industry.getId())
-                                .createdAt(LocalDateTime.now())
-                                .build()
-                );
-            }
-        }
-
-        if (aiResponse.purposes() != null) {
-            for (var p : aiResponse.purposes()) {
-                Purpose purpose = purposeRepository.findById(p.id())
-                        .orElseThrow(() -> new IllegalArgumentException("Purpose not found: " + p.id()));
-                template.getPurposes().add(purpose);
-                templatePurposeRepository.save(
-                        TemplatePurpose.builder()
-                                .template(template)
-                                .purposeId(purpose.getId())
-                                .createdAt(LocalDateTime.now())
-                                .build()
-                );
-            }
-        }
-
-        templateRepository.save(template);
-
-        templateHistoryRepository.save(
-                TemplateHistory.builder()
-                        .template(template)
-                        .status(TemplateStatus.CREATED)
-                        .createdAt(LocalDateTime.now())
-                        .build()
-        );
-
-        return TemplateResponse.from(template);
     }
 }
