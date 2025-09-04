@@ -1,0 +1,37 @@
+name: Deploy to ECS
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::808605954528:role/GitHubActionsECSDeployer
+          aws-region: ap-northeast-2
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ap-northeast-2 \
+            | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com
+
+      - name: Build, tag, and push image
+        run: |
+          docker build -t final_jober .
+          docker tag final_jober:latest <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/final_jober:latest
+          docker push <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/final_jober:latest
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster final_jober \
+            --service final_jober-service \
+            --force-new-deployment \
+            --region ap-northeast-2

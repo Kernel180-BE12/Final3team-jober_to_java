@@ -1,9 +1,18 @@
-target/
-.idea/
-.git/
+# VCS/IDE
+.git
 .gitignore
-.mvn/
-mvnw
-mvnw.cmd
-docker-compose*.yml
+.idea
+.vscode
 *.iml
+
+# 빌드 결과/캐시
+target/
+docker-compose*.yml
+
+# 문제 유발 로컬 데이터/소켓
+dbdata/
+**/*.sock
+memory_db/
+node_modules/
+*.log
+*.tmp

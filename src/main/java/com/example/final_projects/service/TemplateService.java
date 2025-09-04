@@ -1,0 +1,178 @@
+package com.example.final_projects.service;
+
+import com.example.final_projects.dto.PageResponse;
+import com.example.final_projects.dto.template.AiTemplateRequest;
+import com.example.final_projects.dto.template.AiTemplateResponse;
+import com.example.final_projects.dto.template.TemplateCreateRequest;
+import com.example.final_projects.dto.template.TemplateResponse;
+import com.example.final_projects.entity.*;
+import com.example.final_projects.repository.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@Transactional(readOnly = true)
+public class TemplateService {
+
+    private final TemplateRepository templateRepository;
+    private final TemplateHistoryRepository templateHistoryRepository;
+    private final RestClient restClient;
+    private final TemplateButtonRepository templateButtonRepository;
+    private final TemplateVariableRepository templateVariableRepository;
+    private final TemplateIndustryRepository templateIndustryRepository;
+    private final TemplatePurposeRepository templatePurposeRepository;
+    private final IndustryRepository industryRepository;
+    private final PurposeRepository purposeRepository;
+
+    public TemplateService(
+            TemplateRepository templateRepository,
+            TemplateHistoryRepository templateHistoryRepository,
+            RestClient restClient,
+            TemplateButtonRepository templateButtonRepository,
+            TemplateVariableRepository templateVariableRepository,
+            TemplateIndustryRepository templateIndustryRepository,
+            TemplatePurposeRepository templatePurposeRepository,
+            IndustryRepository industryRepository,
+            PurposeRepository purposeRepository
+    ) {
+        this.templateRepository = templateRepository;
+        this.templateHistoryRepository = templateHistoryRepository;
+        this.restClient = restClient;
+        this.templateButtonRepository = templateButtonRepository;
+        this.templateVariableRepository = templateVariableRepository;
+        this.templateIndustryRepository = templateIndustryRepository;
+        this.templatePurposeRepository = templatePurposeRepository;
+        this.industryRepository = industryRepository;
+        this.purposeRepository = purposeRepository;
+    }
+
+    public PageResponse<TemplateResponse> getTemplates(Long userId, TemplateStatus status, int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page - 1, size);
+
+        Page<Template> templatePage = templateRepository.findByUserIdAndStatus(userId, status, pageRequest);
+
+        List<TemplateResponse> data = templatePage.getContent().stream()
+                .map(TemplateResponse::from)
+                .toList();
+
+        return new PageResponse<>(data, page, size, templatePage.getTotalElements());
+    }
+
+    public TemplateResponse getTemplateById(Long templateId, Long userId) {
+        Template template = templateRepository.findById(templateId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않습니다"));
+
+        if (template.getUserId() == null || !template.getUserId().equals(userId)) {
+            throw new AccessDeniedException("권한이 없습니다");
+        }
+        return TemplateResponse.from(template);
+    }
+
+    @Transactional
+    public TemplateResponse createTemplate(Long userId, TemplateCreateRequest request) {
+        Template template = Template.builder()
+                .userId(userId)
+                .requestContent(request.getRequestContent())
+                .status(TemplateStatus.CREATE_REQUESTED)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        templateRepository.save(template);
+
+        templateHistoryRepository.save(
+                TemplateHistory.builder()
+                        .template(template)
+                        .status(TemplateStatus.CREATE_REQUESTED)
+                        .createdAt(LocalDateTime.now())
+                        .build()
+        );
+
+        String aiUrl = "http://fastapi-server:8000/ai/templates";
+        AiTemplateResponse aiResponse = restClient.post()
+                .uri(aiUrl)
+                .body(new AiTemplateRequest(userId, request.getRequestContent()))
+                .retrieve()
+                .body(AiTemplateResponse.class);
+
+        if (aiResponse == null) {
+            throw new IllegalStateException("AI 서버 응답이 없습니다");
+        }
+
+        template.updateFromAi(aiResponse);
+
+        if (aiResponse.buttons() != null) {
+            aiResponse.buttons().forEach(b -> templateButtonRepository.save(
+                    TemplateButton.builder()
+                            .template(template)
+                            .name(b.name())
+                            .ordering(b.ordering())
+                            .linkPc(b.linkPc())
+                            .linkAnd(b.linkAnd())
+                            .linkIos(b.linkIos())
+                            .createdAt(LocalDateTime.now())
+                            .build()
+            ));
+        }
+
+        if (aiResponse.variables() != null) {
+            aiResponse.variables().forEach(v -> templateVariableRepository.save(
+                    TemplateVariable.builder()
+                            .template(template)
+                            .variableKey(v.variableKey())
+                            .placeholder(v.placeholder())
+                            .inputType(v.inputType())
+                            .createdAt(LocalDateTime.now())
+                            .build()
+            ));
+        }
+
+        if (aiResponse.industries() != null) {
+            for (var i : aiResponse.industries()) {
+                Industry industry = industryRepository.findById(i.id())
+                        .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + i.id()));
+                template.getIndustries().add(industry);
+                templateIndustryRepository.save(
+                        TemplateIndustry.builder()
+                                .template(template)
+                                .industryId(industry.getId())
+                                .createdAt(LocalDateTime.now())
+                                .build()
+                );
+            }
+        }
+
+        if (aiResponse.purposes() != null) {
+            for (var p : aiResponse.purposes()) {
+                Purpose purpose = purposeRepository.findById(p.id())
+                        .orElseThrow(() -> new IllegalArgumentException("Purpose not found: " + p.id()));
+                template.getPurposes().add(purpose);
+                templatePurposeRepository.save(
+                        TemplatePurpose.builder()
+                                .template(template)
+                                .purposeId(purpose.getId())
+                                .createdAt(LocalDateTime.now())
+                                .build()
+                );
+            }
+        }
+
+        templateRepository.save(template);
+
+        templateHistoryRepository.save(
+                TemplateHistory.builder()
+                        .template(template)
+                        .status(TemplateStatus.CREATED)
+                        .createdAt(LocalDateTime.now())
+                        .build()
+        );
+
+        return TemplateResponse.from(template);
+    }
+}
