@@ -1,5 +1,6 @@
 package com.example.final_projects.entity;
 
+import com.example.final_projects.dto.template.AiTemplateResponse;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -81,4 +82,15 @@ public class Template {
             inverseJoinColumns = @JoinColumn(name = "purpose_id")
     )
     private Set<Purpose> purposes = new HashSet<>();
+
+    public void updateFromAi(AiTemplateResponse ai) {
+        this.categoryId = ai.categoryId();
+        this.title = ai.title();
+        this.content = ai.content();
+        this.imageUrl = ai.imageUrl();
+        this.type = TemplateType.valueOf(ai.type());
+        this.isPublic = ai.isPublic();
+        this.status = TemplateStatus.valueOf(ai.status());
+        this.updatedAt = ai.updatedAt();
+    }
 }
