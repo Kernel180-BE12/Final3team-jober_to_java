@@ -1,9 +1,21 @@
-name: Deploy to ECS
+name: Deploy to EC2 via SSM (Docker)
 
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-northeast-2
+  ACCOUNT_ID: "808605954528"
+  ECR_REPOSITORY: "final_jober"
+  IMAGE_TAG: "${{ github.sha }}"
+  EC2_INSTANCE_IDS: "i-0b91d1830ba55c061"
+  TG_NAME: "ins-jober-8080"
 
 permissions:
   id-token: write
@@ -12,56 +24,86 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      AWS_REGION: ap-northeast-2
-      ACCOUNT_ID: "808605954528"
-      ECR_REGISTRY: "808605954528.dkr.ecr.ap-northeast-2.amazonaws.com"
-      ECR_REPOSITORY: "final_jober"
-      IMAGE_TAG: "${{ github.sha }}"   # 커밋 SHA로도 태깅
-      ECS_CLUSTER: "final_jober"
-      ECS_SERVICE: "arn:aws:ecs:ap-northeast-2:808605954528:service/final_jober/app-service-amyzs0hv"
-      CONTAINER_NAME: "app"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::808605954528:role/github_action_role
+          role-to-assume: arn:aws:iam::808605954528:role/github_action_role  # ← ❗네가 쓰는 배포 롤 ARN
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify caller identity (STS)
-        run: aws sts get-caller-identity
-
-      - name: Log in to Amazon ECR
+      - name: Ensure ECR repository exists
         run: |
-          aws ecr get-login-password --region $AWS_REGION \
-            | docker login --username AWS --password-stdin $ECR_REGISTRY
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 \
+          || aws ecr create-repository --repository-name "$ECR_REPOSITORY" \
+               --image-scanning-configuration scanOnPush=true \
+               --encryption-configuration encryptionType=AES256
 
-      - name: Build, tag, and push image
+      - name: Login to ECR
         run: |
-          docker build -t $ECR_REPOSITORY .
-          docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR"
 
-      - name: Render task definition (replace image)
-        id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: .github/ecs/taskdef.json
-          container-name: ${{ env.CONTAINER_NAME }}            # app
-          image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+      - name: Build & Push image
+        run: |
+          ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          docker build -t "$ECR/$ECR_REPOSITORY:latest" .
+          docker tag  "$ECR/$ECR_REPOSITORY:latest" "$ECR/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR/$ECR_REPOSITORY:latest"
+          docker push "$ECR/$ECR_REPOSITORY:$IMAGE_TAG"
 
-      - name: Deploy to ECS (register new revision and update service)
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.render.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}                      # ARN 사용
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+      - name: Ensure Target Group health check is /health/db
+        run: |
+          TG_ARN=$(aws elbv2 describe-target-groups \
+            --names "$TG_NAME" --region "$AWS_REGION" \
+            --query 'TargetGroups[0].TargetGroupArn' --output text)
+          echo "TG_ARN=$TG_ARN"
+          aws elbv2 modify-target-group \
+            --target-group-arn "$TG_ARN" --region "$AWS_REGION" \
+            --health-check-path "/health/db" \
+            --matcher HttpCode=200-399 \
+            --health-check-interval-seconds 15 \
+            --health-check-timeout-seconds 6 \
+            --healthy-threshold-count 2 \
+            --unhealthy-threshold-count 2
+
+      - name: Deploy to EC2 via SSM (create/refresh systemd unit & restart)
+        id: ssm
+        run: |
+          set -e
+          ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids $EC2_INSTANCE_IDS \
+            --document-name "AWS-RunShellScript" \
+            --comment "Pull new image & restart jober" \
+            --parameters '{
+              "commands": [
+                "set -euo pipefail",
+                "command -v docker >/dev/null 2>&1 || (sudo dnf install -y docker || sudo yum install -y docker)",
+                "sudo systemctl enable --now docker",
+                "aws ecr get-login-password --region '"$AWS_REGION"' | sudo docker login --username AWS --password-stdin '"$ECR"'",
+                "sudo docker pull '"$ECR"'/'"$ECR_REPOSITORY"':'"$IMAGE_TAG"'",
+                "sudo bash -lc \"cat > /etc/systemd/system/jober.service <<'UNIT'\n[Unit]\nDescription=Jober App (Docker)\nRequires=docker.service\nAfter=docker.service\n\n[Service]\nRestart=always\nRestartSec=5\nExecStartPre=-/usr/bin/docker rm -f jober\nExecStart=/usr/bin/bash -lc 'ENV_OPT=\"\"; [ -f /opt/app.env ] && ENV_OPT=\"--env-file /opt/app.env\"; exec /usr/bin/docker run --name jober --rm -p 8080:8080 $ENV_OPT '"$ECR"'/'"$ECR_REPOSITORY"':'"$IMAGE_TAG"''\nExecStop=/usr/bin/docker stop jober\n\n[Install]\nWantedBy=multi-user.target\nUNIT\"",
+                "sudo systemctl daemon-reload",
+                "sudo systemctl enable --now jober",
+                "sleep 3",
+                "curl -fsS http://127.0.0.1:8080/health/db"
+              ]
+            }' \
+            --query "Command.CommandId" --output text \
+            --region "$AWS_REGION")
+          echo "COMMAND_ID=$CMD_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for SSM completion
+        run: |
+          set -e
+          CMD_ID="${{ steps.ssm.outputs.COMMAND_ID }}"
+          for ID in $EC2_INSTANCE_IDS; do
+            aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "$ID" --region "$AWS_REGION"
+            STATUS=$(aws ssm list-command-invocations --command-id "$CMD_ID" --instance-id "$ID" \
+              --details --query "CommandInvocations[0].Status" --output text --region "$AWS_REGION")
+            echo "Instance $ID -> $STATUS"
+            test "$STATUS" = "Success"
+          done

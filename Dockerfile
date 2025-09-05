@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends dos2unix \
 RUN ./mvnw -q -DskipTests package
 
 # --- run stage ---
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:23-jre AS runtime
 WORKDIR /app
 
 # *-SNAPSHOT.jar에 한정하지 말고 *.jar 전체에서 하나만 복사(일반적으로 1개)
