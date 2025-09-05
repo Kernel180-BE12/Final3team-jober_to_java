@@ -1,6 +1,6 @@
 package com.example.final_projects.config.swagger;
 
-import com.example.final_projects.dto.ErrorResponse;
+import com.example.final_projects.dto.ApiResult;
 import com.example.final_projects.exception.code.BaseErrorCode;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -15,6 +15,8 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -69,11 +71,14 @@ public class SwaggerConfig {
             for (BaseErrorCode ec : list) {
                 Example example = new Example();
                 example.setSummary(ec.getErrorReason().getMessage());
-                example.setValue(ErrorResponse.of(
-                        ec.getErrorReason().getStatus(),
+
+                // ApiResult를 사용해서 예제 통일
+                example.setValue(ApiResult.error(
+                        statusToHttpStatus(status),
                         ec.getErrorReason().getCode(),
                         ec.getErrorReason().getMessage()
                 ));
+
                 mediaType.addExamples(ec.getErrorReason().getCode(), example);
             }
 
@@ -81,5 +86,9 @@ public class SwaggerConfig {
             ApiResponse apiResponse = new ApiResponse().content(content);
             responses.addApiResponse(String.valueOf(status), apiResponse);
         });
+    }
+
+    private HttpStatus statusToHttpStatus(int status) {
+        return HttpStatus.resolve(status) != null ? HttpStatus.resolve(status) : HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }
