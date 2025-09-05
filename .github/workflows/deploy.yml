@@ -33,6 +33,12 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::808605954528:role/github_action_role  # ← ❗네가 쓰는 배포 롤 ARN
           aws-region: ${{ env.AWS_REGION }}
+      - name: Verify caller identity (STS)
+        run: |
+          aws sts get-caller-identity
+          echo OK
+
+
 
       - name: Ensure ECR repository exists
         run: |
