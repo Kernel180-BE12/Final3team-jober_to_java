@@ -8,7 +8,7 @@ import java.util.List;
 @Getter
 @AllArgsConstructor
 public class PageResponse<T> {
-    private final List<T> data;
+    private final List<T> items;
     private final int page;
     private final int size;
     private final long total;

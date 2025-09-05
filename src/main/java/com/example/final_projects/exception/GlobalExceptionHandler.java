@@ -1,6 +1,7 @@
 package com.example.final_projects.exception;
 
-import com.example.final_projects.dto.ErrorResponse;
+import com.example.final_projects.dto.ApiResult;
+import com.example.final_projects.exception.code.BaseErrorCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -10,47 +11,52 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(
-                ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "Bad Request", ex.getMessage())
-        );
+    public ResponseEntity<ApiResult<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity
+                .badRequest()
+                .body(ApiResult.error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage()));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
-                ErrorResponse.of(HttpStatus.FORBIDDEN.value(), "Forbidden", ex.getMessage())
-        );
+    public ResponseEntity<ApiResult<Void>> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResult.error(HttpStatus.FORBIDDEN, "FORBIDDEN", ex.getMessage()));
     }
 
     @ExceptionHandler({IllegalStateException.class, NullPointerException.class})
-    public ResponseEntity<ErrorResponse> handleServerErrors(RuntimeException ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal Server Error", ex.getMessage())
-        );
+    public ResponseEntity<ApiResult<Void>> handleServerErrors(RuntimeException ex) {
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getAllErrors().get(0).getDefaultMessage();
-        return ResponseEntity.badRequest().body(
-                ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "Validation Error", message)
-        );
+    public ResponseEntity<ApiResult<Void>> handleValidation(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getAllErrors().getFirst().getDefaultMessage();
+        return ResponseEntity
+                .badRequest()
+                .body(ApiResult.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Unexpected Error", ex.getMessage())
-        );
+    public ResponseEntity<ApiResult<Void>> handleGeneral(Exception ex) {
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "UNEXPECTED_ERROR", ex.getMessage()));
     }
 
     @ExceptionHandler(TemplateException.class)
-    public ResponseEntity<ErrorResponse> handleTemplateException(TemplateException ex) {
-        ErrorReason reason = ex.getErrorCode().getErrorReason();
+    public ResponseEntity<ApiResult<Void>> handleTemplateException(TemplateException ex) {
+        BaseErrorCode errorCode = ex.getErrorCode();
         return ResponseEntity
-                .status(reason.getStatus())
-                .body(ErrorResponse.of(reason.getStatus(), "Error", reason.getMessage()));
+                .status(errorCode.getErrorReason().getStatus())
+                .body(ApiResult.error(
+                        HttpStatus.valueOf(errorCode.getErrorReason().getStatus()),
+                        errorCode.getErrorReason().getCode(),
+                        errorCode.getErrorReason().getMessage()
+                ));
     }
 }
