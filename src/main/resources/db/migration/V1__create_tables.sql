@@ -86,7 +86,7 @@ CREATE TABLE user_template_request (
 CREATE TABLE template (
                           id BIGINT NOT NULL AUTO_INCREMENT,
                           user_id BIGINT NOT NULL,
-                          category_id BIGINT NOT NULL,
+                          category_id VARCHAR(10) NOT NULL,
                           user_template_request_id BIGINT NULL,
                           title VARCHAR(255) NULL,
                           content LONGTEXT NULL,
@@ -134,11 +134,15 @@ CREATE TABLE template_history (
 );
 
 CREATE TABLE category (
-                          id BIGINT NOT NULL AUTO_INCREMENT,
+                          id VARCHAR(10) NOT NULL,
                           name VARCHAR(100) NULL,
-                          parent_id BIGINT NULL,
+                          parent_id VARCHAR(10) NULL,
+                          keywords JSON,
+                          is_active BOOLEAN DEFAULT TRUE,
                           created_at TIMESTAMP NULL,
-                          CONSTRAINT PK_CATEGORY PRIMARY KEY (id)
+                          INDEX idx_parent_id (parent_id),
+                          CONSTRAINT PK_CATEGORY PRIMARY KEY (id),
+                          FOREIGN KEY (parent_id) REFERENCES category(id) ON DELETE SET NULL
 );
 
 CREATE TABLE industry (
