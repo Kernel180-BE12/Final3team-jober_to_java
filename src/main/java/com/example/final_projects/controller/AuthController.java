@@ -4,10 +4,7 @@ import com.example.final_projects.common.ApiResponse;
 import com.example.final_projects.dto.auth.*;
 import com.example.final_projects.service.AuthService;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
@@ -29,5 +26,10 @@ public class AuthController {
     public ApiResponse<Void> logout(@Valid @RequestBody LogoutRequest req){
         authService.logout(req);
         return ApiResponse.ok("로그아웃 되었습니다.", null);
+    }
+    @GetMapping("/verify")
+    public ApiResponse<Void> verify(@RequestParam("token") String token){
+        authService.verifyEmail(new VerifyEmailRequest(token));
+        return ApiResponse.ok("이메일 인증이 완료되었습니다.", null);
     }
 }

@@ -26,3 +26,9 @@ jwt:
   secret: bqRgdYiJ8PphtR0lZhoo8Rzch+TJechjMOyF9+j8pSQ=
   access-validaity-ms: 1800000  #30min
   refresh-validity-ms: 1209600000 #14day
+
+
+security:
+  verify:
+    base-url: http://localhost:8080
+
