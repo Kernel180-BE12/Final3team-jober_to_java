@@ -11,7 +11,7 @@ import java.util.List;
 public class TemplateResponse {
     private Long id;
     private Long userId;
-    private Long categoryId;
+    private String categoryId;
     private String title;
     private String content;
     private String imageUrl;

@@ -27,7 +27,7 @@ public class Template {
     private Long userId;
 
     @Column(name = "category_id", nullable = false)
-    private Long categoryId;
+    private String categoryId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_template_request_id")
