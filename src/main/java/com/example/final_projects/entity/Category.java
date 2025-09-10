@@ -15,13 +15,21 @@ import java.time.LocalDateTime;
 public class Category {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(length = 10, nullable = false)
+    private String id;
 
+    @Column(length = 100)
     private String name;
 
-    @Column(name = "parent_id")
-    private Long parentId;
+    @Column(name = "parent_id", length = 10)
+    private String parentId;
 
+    @Column(columnDefinition = "json")
+    private String keywords;
+
+    @Column(name = "is_active")
+    private Boolean isActive = true;
+
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 }

@@ -9,7 +9,7 @@ import java.util.List;
 public record AiTemplateResponse(
         Long id,
         Long userId,
-        Long categoryId,
+        String categoryId,
         String title,
         String content,
         String imageUrl,
