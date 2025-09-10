@@ -1,13 +1,25 @@
-name: Deploy to ECS
+name: Deploy to EC2 via SSM (Docker)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: true
 
 permissions:
   id-token: write
   contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ACCOUNT_ID: "808605954528"
+  ECR_REPOSITORY: "final_jober"
+  IMAGE_TAG: "${{ github.sha }}"
+  EC2_INSTANCE_IDS: "i-0b91d1830ba55c061"   # 필요시 교체
+  TG_NAME: "ins-jober-8080"
 
 jobs:
   deploy:
@@ -19,36 +31,145 @@ jobs:
       ECR_REPOSITORY: "final_jober"
       IMAGE_TAG: "${{ github.sha }}"   # 커밋 SHA로도 태깅
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
+      - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::808605954528:role/GitHubActionsECSDeployer
+          role-to-assume: arn:aws:iam::808605954528:role/github_action_role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify caller identity (STS)
-        run: aws sts get-caller-identity
-
-      - name: Log in to Amazon ECR
+        shell: bash
         run: |
-          aws ecr get-login-password --region $AWS_REGION \
-            | docker login --username AWS --password-stdin $ECR_REGISTRY
+          aws sts get-caller-identity
+          echo OK
 
-      - name: Build, tag, and push image
+      - name: Ensure ECR repository exists
+        shell: bash
         run: |
-          docker build -t $ECR_REPOSITORY .
-          docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 \
+          || aws ecr create-repository --repository-name "$ECR_REPOSITORY" \
+               --image-scanning-configuration scanOnPush=true \
+               --encryption-configuration encryptionType=AES256
 
-      # (선택) 태스크 정의가 :latest를 쓰고 있다면 force-new-deployment만으로 새 이미지를 당겨옵니다.
-      - name: Update ECS service
+      - name: Login to ECR
+        shell: bash
         run: |
-          aws ecs update-service \
-            --cluster final_jober \
-            --service final_jober-service \
-            --force-new-deployment \
-            --region $AWS_REGION
+          ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR"
+
+      - name: Build & Push image
+        shell: bash
+        run: |
+          ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          docker build -t "$ECR/$ECR_REPOSITORY:latest" .
+          docker tag  "$ECR/$ECR_REPOSITORY:latest" "$ECR/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR/$ECR_REPOSITORY:latest"
+          docker push "$ECR/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Ensure Target Group health check is /health/db
+        shell: bash
+        continue-on-error: true   # 권한 없으면 스킵하고 계속 진행
+        run: |
+          TG_ARN=$(aws elbv2 describe-target-groups \
+            --names "$TG_NAME" --region "$AWS_REGION" \
+            --query 'TargetGroups[0].TargetGroupArn' --output text)
+          echo "TG_ARN=$TG_ARN"
+          CUR=$(aws elbv2 describe-target-groups \
+            --target-group-arns "$TG_ARN" --region "$AWS_REGION" \
+            --query 'TargetGroups[0].HealthCheckPath' --output text)
+          echo "Current health path: $CUR"
+          if [ "$CUR" != "/health/db" ]; then
+            aws elbv2 modify-target-group \
+              --target-group-arn "$TG_ARN" --region "$AWS_REGION" \
+              --health-check-path "/health/db" \
+              --matcher HttpCode=200-399 \
+              --health-check-interval-seconds 15 \
+              --health-check-timeout-seconds 6 \
+              --healthy-threshold-count 2 \
+              --unhealthy-threshold-count 2 || echo "No permission to modify TG; skipping"
+          fi
+
+      - name: Deploy to EC2 via SSM (create/refresh systemd unit & restart)
+        id: ssm
+        shell: bash
+        run: |
+          set -euo pipefail
+          ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="$ECR/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          # 1) 유닛 파일 생성 (heredoc/중괄호 미사용)
+          printf '%s\n' \
+            '[Unit]' \
+            'Description=Jober App (Docker)' \
+            'Requires=docker.service' \
+            'After=docker.service' \
+            '' \
+            '[Service]' \
+            'Restart=always' \
+            'RestartSec=5' \
+            'ExecStartPre=-/usr/bin/docker rm -f jober' \
+            "ExecStart=/usr/bin/bash -lc 'ENV_OPT=\"\"; [ -f /opt/app.env ] && ENV_OPT=\"--env-file /opt/app.env\"; exec /usr/bin/docker run --name jober --rm -p 8080:8080 \$ENV_OPT IMAGE_URI_PLACEHOLDER'" \
+            'ExecStop=/usr/bin/docker stop jober' \
+            '' \
+            '[Install]' \
+            'WantedBy=multi-user.target' \
+            > /tmp/jober.service
+          sed -i "s|IMAGE_URI_PLACEHOLDER|$IMAGE_URI|g" /tmp/jober.service
+
+          # 2) Base64 인코딩
+          UNIT_B64=$(base64 -w0 /tmp/jober.service || base64 /tmp/jober.service | tr -d '\n')
+
+          # 3) SSM commands JSON 파일 생성 (printf로 안전하게)
+          printf '%s\n' \
+            '{' \
+            '  "commands": [' \
+            '    "set -euo pipefail",' \
+            '    "command -v docker >/dev/null 2>&1 || (sudo dnf install -y docker || sudo yum install -y docker)",' \
+            '    "sudo systemctl enable --now docker",' \
+            "    \"aws ecr get-login-password --region $AWS_REGION | sudo docker login --username AWS --password-stdin $ECR\"," \
+            "    \"sudo docker pull $IMAGE_URI\"," \
+            "    \"echo $UNIT_B64 | base64 -d | sudo tee /etc/systemd/system/jober.service >/dev/null\"," \
+            '    "sudo systemctl daemon-reload",' \
+            '    "sudo systemctl enable --now jober",' \
+            '    "sleep 3",' \
+            '    "curl -fsS http://127.0.0.1:8080/health/db"' \
+            '  ]' \
+            '}' \
+            > /tmp/ssm-commands.json
+
+          # 4) SSM 실행
+          CMD_ID=$(aws ssm send-command \
+            --cli-binary-format raw-in-base64-out \
+            --instance-ids $EC2_INSTANCE_IDS \
+            --document-name "AWS-RunShellScript" \
+            --parameters file:///tmp/ssm-commands.json \
+            --region "$AWS_REGION" \
+            --query "Command.CommandId" --output text)
+          echo "COMMAND_ID=$CMD_ID"
+          echo "COMMAND_ID=$CMD_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM completion
+        shell: bash
+        run: |
+          set -e
+          CMD_ID="${{ steps.ssm.outputs.COMMAND_ID }}"
+          for ID in $EC2_INSTANCE_IDS; do
+            aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "$ID" --region "$AWS_REGION"
+            STATUS=$(aws ssm list-command-invocations --command-id "$CMD_ID" --instance-id "$ID" \
+              --details --query "CommandInvocations[0].Status" --output text --region "$AWS_REGION")
+            echo "Instance $ID -> $STATUS"
+            test "$STATUS" = "Success"
+          done
+
+      - name: Verify ALB target health (optional)
+        if: always()
+        shell: bash
+        continue-on-error: true
+        run: |
+          TG_ARN=$(aws elbv2 describe-target-groups \
+            --names "$TG_NAME" --region "$AWS_REGION" \
+            --query 'TargetGroups[0].TargetGroupArn' --output text)
+          aws elbv2 describe-target-health --target-group-arn "$TG_ARN" --region "$AWS_REGION" \
+            --query 'TargetHealthDescriptions[].TargetHealth.State'

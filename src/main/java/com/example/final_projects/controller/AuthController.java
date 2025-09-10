@@ -1,6 +1,6 @@
 package com.example.final_projects.controller;
 
-import com.example.final_projects.common.ApiResponse;
+import com.example.final_projects.dto.ApiResult;
 import com.example.final_projects.dto.auth.*;
 import com.example.final_projects.service.AuthService;
 import jakarta.validation.Valid;
@@ -13,19 +13,19 @@ public class AuthController {
     public AuthController(AuthService authService){ this.authService=authService; }
 
     @PostMapping("/signup")
-    public ApiResponse<SignupResponse> signup(@Valid @RequestBody SignupRequest req){
-        return ApiResponse.ok(authService.signup(req));
+    public ApiResult<SignupResponse> signup(@Valid @RequestBody SignupRequest req){
+        return ApiResult.ok(authService.signup(req));
     }
 
     @PostMapping("/login")
-    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest req){
-        return ApiResponse.ok(authService.login(req));
+    public ApiResult<LoginResponse> login(@Valid @RequestBody LoginRequest req){
+        return ApiResult.ok(authService.login(req));
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@Valid @RequestBody LogoutRequest req){
+    public ApiResult<Void> logout(@Valid @RequestBody LogoutRequest req){
         authService.logout(req);
-        return ApiResponse.ok("로그아웃 되었습니다.", null);
+        return ApiResult.ok("로그아웃 되었습니다.", null);
     }
     @GetMapping("/verify")
     public ApiResponse<Void> verify(@RequestParam("token") String token){
