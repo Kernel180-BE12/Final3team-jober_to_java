@@ -8,10 +8,10 @@ import jakarta.validation.constraints.Size;
 public class SignupRequest {
         @Email @NotBlank private String email;
         @NotBlank @Size(min=8,max=64) private String password;
-        @NotBlank @Size(min=1,max=30) private String nickname; // or name
+        @NotBlank @Size(min=1,max=30) private String name; // or name
 
         public SignupRequest() {}
-        public SignupRequest(String e, String p, String n){ this.email=e; this.password=p; this.nickname=n; }
+        public SignupRequest(String e, String p, String n){ this.email=e; this.password=p; this.name=n; }
         // getters/setters
 
     public String getEmail() {
@@ -22,8 +22,8 @@ public class SignupRequest {
         return password;
     }
 
-    public String getNickname() {
-        return nickname;
+    public String getName() {
+        return name;
     }
 }
 

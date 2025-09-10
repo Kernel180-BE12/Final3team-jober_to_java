@@ -22,6 +22,9 @@ public class VerifyEmailToken {
     @Column(nullable=false)
     private boolean used = false;
 
+    @Column(name="created_at", nullable=false, updatable=false)
+    private LocalDateTime createdAt;
+
     public VerifyEmailToken() {
 
     }
@@ -51,6 +54,22 @@ public class VerifyEmailToken {
         this.token = token;
         this.user = user;
         this.expiresAt = expiresAt;
+        this.used = used;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    public void setUsed(boolean used) {
         this.used = used;
     }
 }

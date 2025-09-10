@@ -3,18 +3,23 @@ package com.example.final_projects.service;
 import com.example.final_projects.dto.auth.*;
 import com.example.final_projects.entity.RefreshToken;
 import com.example.final_projects.entity.User;
+import com.example.final_projects.entity.VerifyEmailToken;
 import com.example.final_projects.repository.RefreshTokenRepository;
 import com.example.final_projects.repository.UserRepository;
+import com.example.final_projects.repository.VerifyEmailTokenRepository;
 import com.example.final_projects.security.JwtTokenProvider;
+import com.example.final_projects.support.MailService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 
-    @Service
+@Service
     @Transactional
     public class AuthServiceImpl implements AuthService {
 
@@ -22,15 +27,24 @@ import java.util.List;
         private final RefreshTokenRepository refreshTokenRepository;
         private final PasswordEncoder passwordEncoder;
         private final JwtTokenProvider jwtTokenProvider;
+        private final VerifyEmailTokenRepository verifyEmailTokenRepository;
+        private final MailService mailService;
+        private final String verifyBaseUrl;
 
         public AuthServiceImpl(UserRepository userRepository,
                                RefreshTokenRepository refreshTokenRepository,
                                PasswordEncoder passwordEncoder,
-                               JwtTokenProvider jwtTokenProvider) {
+                               JwtTokenProvider jwtTokenProvider,
+                               VerifyEmailTokenRepository verifyEmailTokenRepository,
+                               MailService mailService,
+                               @Value("${security.verify.base-url}") String verifyBaseUrl) {
             this.userRepository = userRepository;
             this.refreshTokenRepository = refreshTokenRepository;
             this.passwordEncoder = passwordEncoder;
             this.jwtTokenProvider = jwtTokenProvider;
+            this.verifyEmailTokenRepository = verifyEmailTokenRepository;
+            this.mailService = mailService;
+            this.verifyBaseUrl = verifyBaseUrl;
         }
 
         /**
@@ -50,30 +64,21 @@ import java.util.List;
             User user = new User();
             user.setEmail(email);
             user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
-            // nickname/name 중 프로젝트에 맞게
-            try {
-                // 닉네임 필드가 있으면:
-                var nicknameField = User.class.getDeclaredField("nickname");
-                nicknameField.setAccessible(true);
-                nicknameField.set(user, req.getNickname());
-            } catch (NoSuchFieldException | IllegalAccessException ignore) {
-                // name 필드만 있다면:
+
                 try {
                     var nameField = User.class.getDeclaredField("name");
                     nameField.setAccessible(true);
-                    nameField.set(user, req.getNickname());
+                    nameField.set(user, req.getName());
                 } catch (NoSuchFieldException | IllegalAccessException e) { /* 무시 */ }
-            }
+
 
             // 초기 상태값
             try {
                 var statusField = User.class.getDeclaredField("status");
                 statusField.setAccessible(true);
-                // 이메일 인증 나중에 붙일 거라면 ACTIVE로 바로 두어도 됨
-                // enum이면 User.Status.valueOf("ACTIVE")
                 statusField.set(user, Enum.valueOf(
                         (Class<Enum>) statusField.getType(),
-                        "ACTIVE"   // 또는 "PENDING" (이메일 인증 나중에 연결)
+                        "PENDING"   // 또는 "PENDING" (이메일 인증 나중에 연결)
                 ));
             } catch (Exception ignore) {}
 
@@ -90,7 +95,27 @@ import java.util.List;
             } catch (Exception ignore) {}
 
             userRepository.save(user);
-            return new SignupResponse(user.getId(), "회원가입이 완료되었습니다.");
+
+            VerifyEmailToken token = new VerifyEmailToken();
+            token.setToken(UUID.randomUUID().toString());
+            token.setUser(user);
+            token.setExpiresAt(LocalDateTime.now().plusMinutes(1));
+            token.setUsed(false);
+            verifyEmailTokenRepository.save(token);
+
+            String link = verifyBaseUrl + "/auth/verify?token=" + token.getToken();
+            String subject = "[Jober] 이메일 인증을 완료해주세요";
+            String body = """
+                    안녕하세요.
+                    아래링크를 클릭하여 이메일 인증을 완료해주세요.
+                    
+                    %s
+                    
+                    (1분 이내 유효)
+                    """.formatted(link);
+            mailService.send(link, subject, body);
+
+            return new SignupResponse(user.getId(), "회원가입이 완료되었습니다. 이메일 인증 후 사용가능");
         }
 
         /**
@@ -112,6 +137,10 @@ import java.util.List;
             // (선택) 상태/잠금 간단 체크
             if (getBoolean(user, "locked")) {
                 throw new IllegalArgumentException("계정이 잠금 상태입니다. 관리자에게 문의하세요.");
+            }
+
+            if (!"ACTIVE".equals(user.getStatus().name())){
+                throw new IllegalArgumentException("이메일 인증이 완료되지 않았습니다.");
             }
 
             String raw = req.getPassword();
@@ -156,6 +185,24 @@ import java.util.List;
         public void logout(LogoutRequest req) {
             refreshTokenRepository.findByToken(req.getRefreshToken())
                     .ifPresent(rt -> rt.setRevoked(true));
+        }
+
+        @Override
+        public void verifyEmail(VerifyEmailRequest request){
+            var token = verifyEmailTokenRepository.findByToken(request.getToken())
+                    .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 인증 토큰입니다."));
+
+            if(token.isUsed()) throw new IllegalArgumentException("이미 사용된 인증 토큰입니다.");
+            if(token.getExpiresAt().isBefore(LocalDateTime.now()))
+                throw new IllegalArgumentException("인증 토큰이 만료되었습니다.");
+
+            User user = token.getUser();
+            try{
+                var statusField = User.class.getDeclaredField("status");
+                statusField.setAccessible(true);
+                statusField.set(user, Enum.valueOf((Class<Enum>) statusField.getType(), "ACTIVE"));
+            }catch (Exception ignored){}
+            token.setUsed(true);
         }
 
         /* ---- private helper (리플렉션으로 선택 필드 접근) ---- */

@@ -24,6 +24,12 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-northeast-2
+      ACCOUNT_ID: "808605954528"
+      ECR_REGISTRY: "808605954528.dkr.ecr.ap-northeast-2.amazonaws.com"
+      ECR_REPOSITORY: "final_jober"
+      IMAGE_TAG: "${{ github.sha }}"   # 커밋 SHA로도 태깅
     steps:
       - uses: actions/checkout@v4
 
