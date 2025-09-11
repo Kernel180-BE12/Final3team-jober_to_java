@@ -72,6 +72,10 @@ public class SecurityConfig {
 
         c.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000", // dev
+                "http://localhost:5173", // vite dev server
+                "https://lee.telosform.shop", // vercel url
+                "https://www.telosform.shop", // vercel url
+                "https://final-team3-fe.vercel.app", // vercel url
                 "https://final-jober-alb-1947315556.ap-northeast-2.elb.amazonaws.com" // prod
         ));
 
