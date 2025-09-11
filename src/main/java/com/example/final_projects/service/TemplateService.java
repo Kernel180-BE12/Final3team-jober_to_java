@@ -74,106 +74,140 @@ public class TemplateService {
 
     @Transactional
     public TemplateResponse createTemplate(Long userId, TemplateCreateRequest request) {
+        UserTemplateRequest userRequest = createUserTemplateRequest(userId, request);
+
+        try {
+            AiTemplateResponse aiResponse = requestAiTemplate(userId, request);
+
+            Template template = createAndSaveTemplate(userId, aiResponse, userRequest);
+
+            saveTemplateHistory(template);
+
+            markRequestCompleted(userRequest);
+
+            return TemplateResponse.from(template);
+
+        } catch (Exception e) {
+            markRequestFailed(userRequest, e);
+            throw e;
+        }
+    }
+
+    private UserTemplateRequest createUserTemplateRequest(Long userId, TemplateCreateRequest request) {
         UserTemplateRequest userRequest = UserTemplateRequest.builder()
                 .userId(userId)
                 .requestContent(request.getRequestContent())
                 .status(UserTemplateRequestStatus.PENDING)
                 .build();
-        userTemplateRequestRepository.save(userRequest);
+        return userTemplateRequestRepository.save(userRequest);
+    }
 
-        String aiUrl = "http://3.38.180.216:8000/ai/templates";
-        AiTemplateResponse aiResponse;
-        try {
-            aiResponse = restClient.post()
-                    .uri(aiUrl)
-                    .body(new AiTemplateRequest(
-                            userId,
-                            request.getRequestContent()))
-                    .retrieve()
-                    .body(AiTemplateResponse.class);
+    private AiTemplateResponse requestAiTemplate(Long userId, TemplateCreateRequest request) {
+        AiTemplateResponse aiResponse = restClient.post()
+                .uri("/ai/templates")
+                .body(new AiTemplateRequest(userId, request.getRequestContent()))
+                .retrieve()
+                .body(AiTemplateResponse.class);
 
-            if (aiResponse == null) {
-                throw new IllegalStateException("AI 서버 응답이 없습니다");
-            }
-
-            Template template = Template.builder()
-                    .userId(userId)
-                    .categoryId(aiResponse.categoryId())
-                    .title(aiResponse.title())
-                    .content(aiResponse.content())
-                    .imageUrl(aiResponse.imageUrl())
-                    .type(TemplateType.valueOf(aiResponse.type()))
-                    .isPublic(aiResponse.isPublic())
-                    .status(TemplateStatus.CREATED)
-                    .userTemplateRequest(userRequest)
-                    .build();
-            templateRepository.save(template);
-
-            if (aiResponse.buttons() != null) {
-                aiResponse.buttons().forEach(b ->
-                        templateButtonRepository.save(
-                                TemplateButton.builder()
-                                        .template(template)
-                                        .name(b.name())
-                                        .ordering(b.ordering())
-                                        .linkPc(b.linkPc())
-                                        .linkAnd(b.linkAnd())
-                                        .linkIos(b.linkIos())
-                                        .createdAt(LocalDateTime.now())
-                                        .build()
-                        ));
-            }
-
-            if (aiResponse.variables() != null) {
-                aiResponse.variables().forEach(v -> {
-                    TemplateVariable variable = TemplateVariable.builder()
-                            .template(template)
-                            .variableKey(v.variableKey())
-                            .placeholder(v.placeholder())
-                            .inputType(v.inputType())
-                            .createdAt(LocalDateTime.now())
-                            .build();
-                    templateVariableRepository.save(variable);
-                    template.getVariables().add(variable);
-                });
-            }
-
-            if (aiResponse.industries() != null) {
-                for (var i : aiResponse.industries()) {
-                    Industry industry = industryRepository.findById(i.id())
-                            .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + i.id()));
-                    template.getIndustries().add(industry);
-                }
-            }
-
-            if (aiResponse.purposes() != null) {
-                for (var p : aiResponse.purposes()) {
-                    Purpose purpose = purposeRepository.findById(p.id())
-                            .orElseThrow(() -> new IllegalArgumentException("Purpose not found: " + p.id()));
-                    template.getPurposes().add(purpose);
-                }
-            }
-
-            templateRepository.save(template);
-            templateHistoryRepository.save(
-                    TemplateHistory.builder()
-                            .template(template)
-                            .status(TemplateStatus.CREATED)
-                            .createdAt(LocalDateTime.now())
-                            .build()
-            );
-
-            userRequest.setStatus(UserTemplateRequestStatus.COMPLETED);
-            userTemplateRequestRepository.save(userRequest);
-
-            return TemplateResponse.from(template);
-
-        } catch (Exception e) {
-            userRequest.setStatus(UserTemplateRequestStatus.FAILED);
-            userRequest.setErrorMessage(e.getMessage());
-            userTemplateRequestRepository.save(userRequest);
-
-            throw e;
+        if (aiResponse == null) {
+            throw new IllegalStateException("AI 서버 응답이 없습니다");
         }
+        return aiResponse;
+    }
+
+    private Template createAndSaveTemplate(Long userId, AiTemplateResponse aiResponse, UserTemplateRequest userRequest) {
+        Template template = Template.builder()
+                .userId(userId)
+                .categoryId(aiResponse.categoryId())
+                .title(aiResponse.title())
+                .content(aiResponse.content())
+                .imageUrl(aiResponse.imageUrl())
+                .type(TemplateType.valueOf(aiResponse.type()))
+                .isPublic(aiResponse.isPublic())
+                .status(TemplateStatus.CREATED)
+                .userTemplateRequest(userRequest)
+                .build();
+
+        templateRepository.save(template);
+
+        saveTemplateButtons(template, aiResponse);
+        saveTemplateVariables(template, aiResponse);
+        saveTemplateIndustries(template, aiResponse);
+        saveTemplatePurposes(template, aiResponse);
+
+        return templateRepository.save(template);
+    }
+
+    private void saveTemplateButtons(Template template, AiTemplateResponse aiResponse) {
+        if (aiResponse.buttons() == null) return;
+
+        aiResponse.buttons().forEach(b -> templateButtonRepository.save(
+                TemplateButton.builder()
+                        .template(template)
+                        .name(b.name())
+                        .ordering(b.ordering())
+                        .linkPc(b.linkPc())
+                        .linkAnd(b.linkAnd())
+                        .linkIos(b.linkIos())
+                        .createdAt(LocalDateTime.now())
+                        .build()
+        ));
+    }
+
+    private void saveTemplateVariables(Template template, AiTemplateResponse aiResponse) {
+        if (aiResponse.variables() == null) return;
+
+        aiResponse.variables().forEach(v -> {
+            TemplateVariable variable = TemplateVariable.builder()
+                    .template(template)
+                    .variableKey(v.variableKey())
+                    .placeholder(v.placeholder())
+                    .inputType(v.inputType())
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            templateVariableRepository.save(variable);
+            template.getVariables().add(variable);
+        });
+    }
+
+    private void saveTemplateIndustries(Template template, AiTemplateResponse aiResponse) {
+        if (aiResponse.industries() == null) return;
+
+        aiResponse.industries().forEach(i -> {
+            Industry industry = industryRepository.findById(i.id())
+                    .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + i.id()));
+            template.getIndustries().add(industry);
+        });
+    }
+
+    private void saveTemplatePurposes(Template template, AiTemplateResponse aiResponse) {
+        if (aiResponse.purposes() == null) return;
+
+        aiResponse.purposes().forEach(p -> {
+            Purpose purpose = purposeRepository.findById(p.id())
+                    .orElseThrow(() -> new IllegalArgumentException("Purpose not found: " + p.id()));
+            template.getPurposes().add(purpose);
+        });
+    }
+
+    private void saveTemplateHistory(Template template) {
+        templateHistoryRepository.save(
+                TemplateHistory.builder()
+                        .template(template)
+                        .status(TemplateStatus.CREATED)
+                        .createdAt(LocalDateTime.now())
+                        .build()
+        );
+    }
+
+    private void markRequestCompleted(UserTemplateRequest userRequest) {
+        userRequest.setStatus(UserTemplateRequestStatus.COMPLETED);
+        userTemplateRequestRepository.save(userRequest);
+    }
+
+    private void markRequestFailed(UserTemplateRequest userRequest, Exception e) {
+        userRequest.setStatus(UserTemplateRequestStatus.FAILED);
+        userRequest.setErrorMessage(e.getMessage());
+        userTemplateRequestRepository.save(userRequest);
     }
 }

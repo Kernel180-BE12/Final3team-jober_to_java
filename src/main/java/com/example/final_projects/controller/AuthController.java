@@ -28,8 +28,8 @@ public class AuthController {
         return ApiResult.ok("로그아웃 되었습니다.", null);
     }
     @GetMapping("/verify")
-    public ApiResponse<Void> verify(@RequestParam("token") String token){
+    public ApiResult<Void> verify(@RequestParam("token") String token){
         authService.verifyEmail(new VerifyEmailRequest(token));
-        return ApiResponse.ok("이메일 인증이 완료되었습니다.", null);
+        return ApiResult.ok("이메일 인증이 완료되었습니다.", null);
     }
 }

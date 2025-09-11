@@ -36,4 +36,6 @@ server:
       health:
         show-details: always
 
-
+rest:
+  ai:
+    base-url: http://3.36.109.88:8000
