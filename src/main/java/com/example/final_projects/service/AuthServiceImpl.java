@@ -115,7 +115,7 @@ import java.util.UUID;
                     """.formatted(link);
             mailService.send(link, subject, body);
 
-            return new SignupResponse(user.getId(), "회원가입이 완료되었습니다. 이메일 인증 후 사용가능");
+            return new SignupResponse(user.getId(), "회원가입이 완료되었습니다. ");
         }
 
         /**

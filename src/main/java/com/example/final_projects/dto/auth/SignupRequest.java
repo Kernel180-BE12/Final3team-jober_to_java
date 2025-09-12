@@ -9,9 +9,10 @@ public class SignupRequest {
         @Email @NotBlank private String email;
         @NotBlank @Size(min=8,max=64) private String password;
         @NotBlank @Size(min=1,max=30) private String name; // or name
+        @NotBlank private String emailVerificationToken;
 
         public SignupRequest() {}
-        public SignupRequest(String e, String p, String n){ this.email=e; this.password=p; this.name=n; }
+        public SignupRequest(String e, String p, String n, String e1){ this.email=e; this.password=p; this.name=n; this.emailVerificationToken=e1; }
         // getters/setters
 
     public String getEmail() {
@@ -24,6 +25,14 @@ public class SignupRequest {
 
     public String getName() {
         return name;
+    }
+
+    public String getEmailVerificationToken() {
+        return emailVerificationToken;
+    }
+
+    public void setEmailVerificationToken(String emailVerificationToken) {
+        this.emailVerificationToken = emailVerificationToken;
     }
 }
 

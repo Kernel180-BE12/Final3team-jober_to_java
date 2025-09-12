@@ -45,3 +45,7 @@ dbdata/
 mysql/
 *.pid
 *.sock
+
+# Ignore environment files
+.env
+
