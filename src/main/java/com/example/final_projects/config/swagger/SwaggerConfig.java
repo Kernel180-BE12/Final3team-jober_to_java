@@ -15,7 +15,6 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
 
 import java.util.Arrays;
 import java.util.List;
@@ -72,9 +71,7 @@ public class SwaggerConfig {
                 Example example = new Example();
                 example.setSummary(ec.getErrorReason().getMessage());
 
-                // ApiResult를 사용해서 예제 통일
                 example.setValue(ApiResult.error(
-                        statusToHttpStatus(status),
                         ec.getErrorReason().getCode(),
                         ec.getErrorReason().getMessage()
                 ));
@@ -86,9 +83,5 @@ public class SwaggerConfig {
             ApiResponse apiResponse = new ApiResponse().content(content);
             responses.addApiResponse(String.valueOf(status), apiResponse);
         });
-    }
-
-    private HttpStatus statusToHttpStatus(int status) {
-        return HttpStatus.resolve(status) != null ? HttpStatus.resolve(status) : HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }

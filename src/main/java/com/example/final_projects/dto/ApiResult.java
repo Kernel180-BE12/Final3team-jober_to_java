@@ -1,45 +1,44 @@
 package com.example.final_projects.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import org.springframework.http.HttpStatus;
 
 @Getter
 @Builder
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApiResult<T> {
-    private boolean success;
-    private int status;
-    private String message;
-    private String error;
+    @Schema(description = "성공 시 데이터")
     private T data;
+    @Schema(description = "성공 메시지")
+    private ErrorResponse error;
+    @Schema(description = "에러 정보")
+    private String message;
 
     public static <T> ApiResult<T> ok(T data) {
         return ApiResult.<T>builder()
-                .success(true)
-                .status(HttpStatus.OK.value())
-                .message(HttpStatus.OK.getReasonPhrase())
                 .data(data)
+                .message(null)
+                .error(null)
                 .build();
     }
 
     public static <T> ApiResult<T> ok(String message, T data) {
         return ApiResult.<T>builder()
-                .success(true)
-                .status(HttpStatus.OK.value())
-                .message(message)
                 .data(data)
+                .message(message)
+                .error(null)
                 .build();
     }
 
-    public static <T> ApiResult<T> error(HttpStatus status, String errorCode, String message) {
+    public static <T> ApiResult<T> error(String code, String message) {
         return ApiResult.<T>builder()
-                .success(false)
-                .status(status.value())
-                .message(message)
-                .error(errorCode)
                 .data(null)
+                .message(null)
+                .error(ErrorResponse.of(code, message))
                 .build();
     }
 }
