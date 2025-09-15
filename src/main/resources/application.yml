@@ -59,3 +59,22 @@ logging:
 
 
 
+security:
+  otp:
+    pepper: ${OTP_PEPPER}         # 환경변수/Secrets Manager로 주입 (필수)
+    code-length: 6
+    ttl-seconds: 300              # OTP 유효기간 5분
+    token-ttl-seconds: 600        # pre-signup 검증토큰 유효기간 10분
+    resend-min-seconds: 60        # 재발송 쿨다운(초)
+    max-resend-per-hour: 5
+    max-attempts: 5
+
+
+
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+
+
+
