@@ -30,6 +30,7 @@ import java.util.UUID;
         private final VerifyEmailTokenRepository verifyEmailTokenRepository;
         private final MailService mailService;
         private final String verifyBaseUrl;
+        private final EmailOtpService emailOtpService;
 
         public AuthServiceImpl(UserRepository userRepository,
                                RefreshTokenRepository refreshTokenRepository,
@@ -37,6 +38,7 @@ import java.util.UUID;
                                JwtTokenProvider jwtTokenProvider,
                                VerifyEmailTokenRepository verifyEmailTokenRepository,
                                MailService mailService,
+                               EmailOtpService emailOtpService,
                                @Value("${security.verify.base-url}") String verifyBaseUrl) {
             this.userRepository = userRepository;
             this.refreshTokenRepository = refreshTokenRepository;
@@ -45,6 +47,7 @@ import java.util.UUID;
             this.verifyEmailTokenRepository = verifyEmailTokenRepository;
             this.mailService = mailService;
             this.verifyBaseUrl = verifyBaseUrl;
+            this.emailOtpService = emailOtpService;
         }
 
         /**
@@ -56,7 +59,8 @@ import java.util.UUID;
          */
         @Override
         public SignupResponse signup(SignupRequest req) {
-            String email = req.getEmail().trim().toLowerCase();
+            final String email = req.getEmail().trim().toLowerCase();
+            emailOtpService.assertValidVerificationTokenForSignup(email, req.getEmailVerificationToken());
             if (userRepository.existsByEmail(email)) {
                 throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
             }
@@ -69,7 +73,7 @@ import java.util.UUID;
                     var nameField = User.class.getDeclaredField("name");
                     nameField.setAccessible(true);
                     nameField.set(user, req.getName());
-                } catch (NoSuchFieldException | IllegalAccessException e) { /* 무시 */ }
+                } catch (NoSuchFieldException | IllegalAccessException ignored) {}
 
 
             // 초기 상태값
@@ -78,7 +82,7 @@ import java.util.UUID;
                 statusField.setAccessible(true);
                 statusField.set(user, Enum.valueOf(
                         (Class<Enum>) statusField.getType(),
-                        "PENDING"   // 또는 "PENDING" (이메일 인증 나중에 연결)
+                        "ACTIVE"
                 ));
             } catch (Exception ignore) {}
 
@@ -96,24 +100,21 @@ import java.util.UUID;
 
             userRepository.save(user);
 
-            VerifyEmailToken token = new VerifyEmailToken();
-            token.setToken(UUID.randomUUID().toString());
-            token.setUser(user);
-            token.setExpiresAt(LocalDateTime.now().plusMinutes(1));
-            token.setUsed(false);
-            verifyEmailTokenRepository.save(token);
 
-            String link = verifyBaseUrl + "/auth/verify?token=" + token.getToken();
-            String subject = "[Jober] 이메일 인증을 완료해주세요";
-            String body = """
-                    안녕하세요.
-                    아래링크를 클릭하여 이메일 인증을 완료해주세요.
-                    
-                    %s
-                    
-                    (1분 이내 유효)
-                    """.formatted(link);
-            mailService.send(link, subject, body);
+            int used = verifyEmailTokenRepository.markUsedByToken(req.getEmailVerificationToken());
+            if (used != 1) {
+                throw new IllegalStateException("검증 토큰 소진 실패");
+            }
+
+            VerifyEmailToken fresh = verifyEmailTokenRepository.findByToken(req.getEmailVerificationToken())
+                    .orElseThrow(() -> new IllegalStateException("토큰 재조회 실패"));
+
+            fresh.setUser(user);
+            try {
+                var preSignupField = VerifyEmailToken.class.getDeclaredField("preSignup");
+                preSignupField.setAccessible(true);
+                preSignupField.set(fresh, false);
+            } catch (Exception ignored) {}
 
             return new SignupResponse(user.getId(), "회원가입이 완료되었습니다. ");
         }
@@ -187,25 +188,42 @@ import java.util.UUID;
                     .ifPresent(rt -> rt.setRevoked(true));
         }
 
-        @Override
-        public void verifyEmail(VerifyEmailRequest request){
-            var token = verifyEmailTokenRepository.findByToken(request.getToken())
-                    .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 인증 토큰입니다."));
+    @Override
+    public void verifyEmail(VerifyEmailRequest request){
+        var token = verifyEmailTokenRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 인증 토큰입니다."));
 
-            if(token.isUsed()) throw new IllegalArgumentException("이미 사용된 인증 토큰입니다.");
-            if(token.getExpiresAt().isBefore(LocalDateTime.now()))
-                throw new IllegalArgumentException("인증 토큰이 만료되었습니다.");
-
-            User user = token.getUser();
-            try{
-                var statusField = User.class.getDeclaredField("status");
-                statusField.setAccessible(true);
-                statusField.set(user, Enum.valueOf((Class<Enum>) statusField.getType(), "ACTIVE"));
-            }catch (Exception ignored){}
-            token.setUsed(true);
+        // ✅ pre-signup 토큰은 여기서 금지 (가입 요청에 포함해야 함)
+        try {
+            var preField = VerifyEmailToken.class.getDeclaredField("preSignup");
+            preField.setAccessible(true);
+            // Object 리턴이므로 안전하게 Boolean 처리
+            boolean pre = Boolean.TRUE.equals(preField.get(token));
+            if (pre) {
+                throw new IllegalArgumentException("이 토큰은 '회원가입 전 검증'용입니다. 회원가입 요청에 포함해 주세요.");
+            }
+        } catch (NoSuchFieldException | IllegalAccessException ignored) {
+            // 엔티티 구조가 달라졌거나 접근 실패 시엔 그냥 가드 건너뜀 (겸용 환경에서만)
         }
 
-        /* ---- private helper (리플렉션으로 선택 필드 접근) ---- */
+        if (token.isUsed()) throw new IllegalArgumentException("이미 사용된 인증 토큰입니다.");
+        if (token.getExpiresAt() == null || token.getExpiresAt().isBefore(LocalDateTime.now()))
+            throw new IllegalArgumentException("인증 토큰이 만료되었습니다.");
+
+        var user = token.getUser();
+        if (user == null) throw new IllegalStateException("이 토큰에는 연결된 사용자가 없습니다.");
+
+        try{
+            var statusField = User.class.getDeclaredField("status");
+            statusField.setAccessible(true);
+            statusField.set(user, Enum.valueOf((Class<Enum>) statusField.getType(), "ACTIVE"));
+        }catch (Exception ignored){}
+
+        token.setUsed(true);
+    }
+
+
+    /* ---- private helper (리플렉션으로 선택 필드 접근) ---- */
         private boolean getBoolean(Object o, String field) {
             try { var f = o.getClass().getDeclaredField(field); f.setAccessible(true); return (boolean)f.get(o); }
             catch (Exception e) { return false; }

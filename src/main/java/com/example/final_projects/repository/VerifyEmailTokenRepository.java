@@ -15,7 +15,7 @@ public interface VerifyEmailTokenRepository extends JpaRepository<VerifyEmailTok
     Optional<VerifyEmailToken> findByToken(String token);
 
     //가입 시 토큰 1회성 소진
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         update VerifyEmailToken t
            set t.used =true
