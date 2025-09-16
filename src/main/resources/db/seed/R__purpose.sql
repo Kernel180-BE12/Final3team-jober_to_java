@@ -1,8 +1,12 @@
-INSERT INTO purpose (id, name, created_at)
-SELECT 8501,'공지/안내',NOW() WHERE NOT EXISTS(SELECT 1 FROM purpose WHERE name='공지/안내');
-
-INSERT INTO purpose (id, name, created_at)
-SELECT 8502,'신청',NOW() WHERE NOT EXISTS(SELECT 1 FROM purpose WHERE name='신청');
-
-INSERT INTO purpose (id, name, created_at)
-SELECT 8503,'예약',NOW() WHERE NOT EXISTS(SELECT 1 FROM purpose WHERE name='예약');
+INSERT INTO purpose (id, name) VALUES
+                                   (1, '쿠폰'),
+                                   (2, '공지/안내'),
+                                   (3, '뉴스레터'),
+                                   (4, '설문'),
+                                   (5, '리포트'),
+                                   (6, '결제 안내'),
+                                   (7, '콘텐츠 발송'),
+                                   (8, '예약'),
+                                   (9, '회원 관리'),
+                                   (10, '행사 신청'),
+                                   (11, '기타');

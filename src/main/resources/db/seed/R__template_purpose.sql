@@ -1,44 +1,29 @@
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40001, p.id, 10001, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40002, p.id, 10002, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40003, p.id, 10003, NOW() FROM purpose p WHERE p.name = '신청';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40004, p.id, 10004, NOW() FROM purpose p WHERE p.name = '신청';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40005, p.id, 10005, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40006, p.id, 10006, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40007, p.id, 10007, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40008, p.id, 10008, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40009, p.id, 10009, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40010, p.id, 10010, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40011, p.id, 10011, NOW() FROM purpose p WHERE p.name = '예약';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40012, p.id, 10012, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40013, p.id, 10013, NOW() FROM purpose p WHERE p.name = '예약';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40014, p.id, 10014, NOW() FROM purpose p WHERE p.name = '공지/안내';
-
-INSERT INTO template_purpose (id, purpose_id, template_id, created_at)
-SELECT 40015, p.id, 10015, NOW() FROM purpose p WHERE p.name = '공지/안내';
+INSERT INTO template_purpose (id, purpose_id, template_id, created_at) VALUES
+                                                                           (1, 1, 301, NOW()),
+                                                                           (2, 10, 302, NOW()),
+                                                                           (3, 1, 303, NOW()),
+                                                                           (4, 9, 304, NOW()),
+                                                                           (5, 2, 305, NOW()),
+                                                                           (6, 7, 10001, NOW()),
+                                                                           (7, 7, 10002, NOW()),
+                                                                           (8, 8, 10003, NOW()),
+                                                                           (9, 4, 10004, NOW()),
+                                                                           (10, 6, 10005, NOW()),
+                                                                           (11, 8, 10006, NOW()),
+                                                                           (12, 2, 10007, NOW()),
+                                                                           (13, 2, 10008, NOW()),
+                                                                           (14, 5, 10009, NOW()),
+                                                                           (15, 2, 10010, NOW()),
+                                                                           (16, 8, 10011, NOW()),
+                                                                           (17, 2, 10012, NOW()),
+                                                                           (18, 8, 10013, NOW()),
+                                                                           (19, 9, 10014, NOW()),
+                                                                           (20, 2, 10015, NOW()),
+                                                                           (21, 6, 30001, NOW()),
+                                                                           (22, 8, 30002, NOW()),
+                                                                           (23, 10, 30003, NOW()),
+                                                                           (24, 8, 30004, NOW()),
+                                                                           (25, 6, 30005, NOW()),
+                                                                           (26, 2, 30006, NOW()),
+                                                                           (27, 2, 30007, NOW()),
+                                                                           (28, 2, 30008, NOW());
