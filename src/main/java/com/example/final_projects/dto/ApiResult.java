@@ -13,10 +13,10 @@ import lombok.Getter;
 public class ApiResult<T> {
     @Schema(description = "성공 시 데이터")
     private T data;
-    @Schema(description = "성공 메시지")
-    private ErrorResponse error;
-    @Schema(description = "에러 정보")
+    @Schema(description = "성공 시 메시지")
     private String message;
+    @Schema(description = "에러 정보")
+    private ErrorResponse error;
 
     public static <T> ApiResult<T> ok(T data) {
         return ApiResult.<T>builder()
