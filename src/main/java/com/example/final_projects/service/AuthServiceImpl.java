@@ -8,12 +8,14 @@ import com.example.final_projects.repository.RefreshTokenRepository;
 import com.example.final_projects.repository.UserRepository;
 import com.example.final_projects.repository.VerifyEmailTokenRepository;
 import com.example.final_projects.security.JwtTokenProvider;
+import com.example.final_projects.security.TokenHashUtil;
 import com.example.final_projects.support.MailService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +33,8 @@ import java.util.UUID;
         private final MailService mailService;
         private final String verifyBaseUrl;
         private final EmailOtpService emailOtpService;
+        private final String refreshPepper;
+        private final long refreshValidityMs;
 
         public AuthServiceImpl(UserRepository userRepository,
                                RefreshTokenRepository refreshTokenRepository,
@@ -39,7 +43,9 @@ import java.util.UUID;
                                VerifyEmailTokenRepository verifyEmailTokenRepository,
                                MailService mailService,
                                EmailOtpService emailOtpService,
-                               @Value("${security.verify.base-url}") String verifyBaseUrl) {
+                               @Value("${security.verify.base-url}") String verifyBaseUrl,
+                               @Value("${security.refresh.pepper}") String refreshPepper,
+                               @Value("${security.refresh.validity-ms:1209600000}") long refreshValidityMs) {
             this.userRepository = userRepository;
             this.refreshTokenRepository = refreshTokenRepository;
             this.passwordEncoder = passwordEncoder;
@@ -48,6 +54,8 @@ import java.util.UUID;
             this.mailService = mailService;
             this.verifyBaseUrl = verifyBaseUrl;
             this.emailOtpService = emailOtpService;
+            this.refreshPepper = refreshPepper;
+            this.refreshValidityMs = refreshValidityMs;
         }
 
         /**
@@ -165,12 +173,17 @@ import java.util.UUID;
             List<String> roles = List.of("USER");
 
             String access = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), roles);
+            String jti = UUID.randomUUID().toString();
             String refresh = jwtTokenProvider.createRefreshToken(user.getId());
 
+            String tokenHash = TokenHashUtil.sha256HexWithPepper(refreshPepper, refresh);
+            LocalDateTime expiresAt = LocalDateTime.now().plus(Duration.ofMillis(refreshValidityMs));
+
             RefreshToken rt = new RefreshToken();
-            rt.setToken(refresh);
-            rt.setUser(user);
-            rt.setExpiresAt(LocalDateTime.now().plusDays(14));
+            rt.setJti(jti);
+            rt.setTokenHash(tokenHash);
+            rt.setUserId(user.getId());
+            rt.setExpiresAt(expiresAt);
             rt.setRevoked(false);
             refreshTokenRepository.save(rt);
 
@@ -184,7 +197,8 @@ import java.util.UUID;
          */
         @Override
         public void logout(LogoutRequest req) {
-            refreshTokenRepository.findByToken(req.getRefreshToken())
+            String hash = TokenHashUtil.sha256HexWithPepper(refreshPepper, req.getRefreshToken());
+            refreshTokenRepository.findByTokenHash(hash)
                     .ifPresent(rt -> rt.setRevoked(true));
         }
 

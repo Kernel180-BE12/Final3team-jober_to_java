@@ -8,12 +8,40 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Repository
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
-    Optional<RefreshToken> findByToken(String token);
-    @Modifying @Transactional
-    @Query("update RefreshToken r set r.revoked=true where r.user.id=:userId and r.revoked=false")
-    int revokeAllActiveByUserId(@Param("userId") Long userId);
+    Optional<RefreshToken> findByTokenHash(String tokenHash);
+    Optional<RefreshToken> findByJti(String Jti);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE RefreshToken r
+           SET r.replacedByJti = :newJti,
+               r.revoked = true,
+               r.rotatedAt = CURRENT_TIMESTAMP
+         WHERE r.jti = :oldJti
+           AND r.revoked = false
+           AND r.replacedByJti IS NULL
+""")
+    int markRotated(@Param("oldJti") String oldJti, @Param("newJti") String newJti);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE RefreshToken r
+           SET r.revoked = true
+         WHERE r.id = :id  
+""")
+    int revokedById(@Param("id")Long id);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE RefreshToken r
+           SET r.revoked = true
+         WHERE r.userId = :userId
+           AND r.expiresAt > :now  
+""")
+    int revokedAllByUserId(@Param("userId") Long userId, @Param("now") LocalDateTime now);
 }
