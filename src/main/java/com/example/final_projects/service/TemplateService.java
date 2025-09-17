@@ -207,7 +207,6 @@ public class TemplateService {
 
     private void markRequestFailed(UserTemplateRequest userRequest, Exception e) {
         userRequest.setStatus(UserTemplateRequestStatus.FAILED);
-        userRequest.setErrorMessage(e.getMessage());
         userTemplateRequestRepository.save(userRequest);
     }
 }
