@@ -50,7 +50,9 @@ security:
     max-resend-per-hour: 5
     max-attempts: 5
 
-
+  refresh:
+    pepper: ${REFRESH_PEPPER:change-me-in-secrets}
+    validity-ms: 1209600000   # 14일 (예시)
 
 logging:
   charset:
