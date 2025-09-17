@@ -25,5 +25,6 @@ public class TemplateHistory {
     @Enumerated(EnumType.STRING)
     private TemplateStatus status;
 
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 }

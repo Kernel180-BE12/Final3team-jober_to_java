@@ -2,6 +2,7 @@ package com.example.final_projects.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -29,28 +30,18 @@ public class UserTemplateRequest {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @ColumnDefault("'PENDING'")
     private UserTemplateRequestStatus status;
 
-    @Column(name = "error_message", length = 500)
-    private String errorMessage;
-
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "userTemplateRequest", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Template> templates = new ArrayList<>();
 
-    @PrePersist
-    public void prePersist() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-        if (this.status == null) {
-            this.status = UserTemplateRequestStatus.PENDING;
-        }
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
+    @OneToMany(mappedBy = "userTemplateRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserTemplateRequestLog> logs;
 }
