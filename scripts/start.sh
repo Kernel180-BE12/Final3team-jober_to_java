@@ -1,7 +1,7 @@
 #!/bin/bash
 APP_NAME=jober-app
-JAR_FILE=target/*.jar
-LOG_FILE=/home/ec2-user/$APP_NAME.log
+JAR_FILE=/home/ubuntu/*.jar
+LOG_FILE=/home/ubuntu/$APP_NAME.log
 
 PID=$(pgrep -f $APP_NAME)
 if [ -n "$PID" ]; then
