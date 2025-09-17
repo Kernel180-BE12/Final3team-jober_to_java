@@ -30,6 +30,6 @@ public class Category {
     @Column(name = "is_active")
     private Boolean isActive = true;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 }

@@ -36,13 +36,11 @@ public class EmailOtp {
     @Column(name="resend_count", nullable=false)
     private int resendCount = 0;
 
-    @Column(name="created_at", nullable=false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name="created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    private LocalDateTime createdAt;
 
-    @Column(name="updated_at", nullable=false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
-
-    @PreUpdate public void onUpdate() {this.updatedAt = LocalDateTime.now();}
+    @Column(name="updated_at", updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+    private LocalDateTime updatedAt;
 
     public String getEmail() {
         return email;

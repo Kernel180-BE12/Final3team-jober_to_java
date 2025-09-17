@@ -21,6 +21,9 @@ public class PasswordResetToken {
     @Column(nullable=false)
     private boolean used = false;
 
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    private LocalDateTime createdAt;
+
     public Long getId() {
         return id;
     }
