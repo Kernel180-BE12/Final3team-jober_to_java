@@ -1,8 +1,6 @@
 package com.example.final_projects.entity;
 
 import jakarta.persistence.*;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
@@ -43,12 +41,10 @@ public class User {
             inverseJoinColumns=@JoinColumn(name="role_id"))
     private Set<Role> roles = new HashSet<>();
 
-    @CreatedDate
-    @Column(nullable = false, updatable=false)
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 
-    @LastModifiedDate
-    @Column(nullable=false)
+    @Column(name = "updated_at", updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
 
     public User() {
@@ -67,7 +63,7 @@ public class User {
         return this.id != null && this.id.equals(other.id);
     }
 
-    public User(Long id, String email, String passwordHash, String name, Status status, boolean locked, LocalDateTime lockedAt, LocalDateTime lastLoginAt, int failCount, Set<Role> roles, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public User(Long id, String email, String passwordHash, String name, Status status, boolean locked, LocalDateTime lockedAt, LocalDateTime lastLoginAt, int failCount, Set<Role> roles) {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
@@ -78,8 +74,6 @@ public class User {
         this.lastLoginAt = lastLoginAt;
         this.failCount = failCount;
         this.roles = roles;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
     }
 
     @Override
@@ -125,14 +119,6 @@ public class User {
 
     public Set<Role> getRoles() {
         return roles;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
     }
 
     public void setEmail(String email) {

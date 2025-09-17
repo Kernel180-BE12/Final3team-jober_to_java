@@ -31,12 +31,10 @@ public class VerifyEmailToken {
     @Column(nullable=false)
     private boolean preSignup = true;
 
-    @Generated(GenerationTime.INSERT) // 선택: 하이버네이트에게 DB가 채운다고 힌트
-    @Column(name="created_at", insertable = false, updatable = false)  // ★ 핵심
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 
-    @Generated(GenerationTime.ALWAYS) // 선택
-    @Column(name="updated_at", insertable = false, updatable = false)  // ★ 핵심
+    @Column(name = "updated_at", updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
 
     public VerifyEmailToken() {

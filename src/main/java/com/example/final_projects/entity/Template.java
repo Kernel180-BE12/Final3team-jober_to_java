@@ -1,6 +1,5 @@
 package com.example.final_projects.entity;
 
-import com.example.final_projects.dto.template.AiTemplateResponse;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -56,7 +55,10 @@ public class Template {
     @Column(name = "reject_reason_summary", length = 500)
     private String rejectReasonSummary;
 
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -88,26 +90,4 @@ public class Template {
     )
     @Builder.Default
     private Set<Purpose> purposes = new HashSet<>();
-
-    @PrePersist
-    public void prePersist() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    public void updateFromAi(AiTemplateResponse ai) {
-        this.categoryId = ai.categoryId();
-        this.title = ai.title();
-        this.content = ai.content();
-        this.imageUrl = ai.imageUrl();
-        this.type = TemplateType.valueOf(ai.type());
-        this.isPublic = ai.isPublic();
-        this.status = TemplateStatus.valueOf(ai.status());
-        this.updatedAt = ai.updatedAt();
-    }
 }

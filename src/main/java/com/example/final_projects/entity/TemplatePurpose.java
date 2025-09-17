@@ -25,5 +25,6 @@ public class TemplatePurpose {
     @JoinColumn(name = "template_id", nullable = false)
     private Template template;
 
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 }

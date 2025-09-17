@@ -22,6 +22,7 @@ public class Industry {
 
     private String name;
 
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 
     @ManyToMany(mappedBy = "industries")

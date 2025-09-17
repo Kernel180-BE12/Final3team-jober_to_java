@@ -31,5 +31,6 @@ public class TemplateVariable {
     @Column(name = "input_type", length = 50)
     private String inputType;
 
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 }
