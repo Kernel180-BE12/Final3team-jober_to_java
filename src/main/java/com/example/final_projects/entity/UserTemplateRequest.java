@@ -41,7 +41,4 @@ public class UserTemplateRequest {
 
     @OneToMany(mappedBy = "userTemplateRequest", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Template> templates = new ArrayList<>();
-
-    @OneToMany(mappedBy = "userTemplateRequest", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<UserTemplateRequestLog> logs;
 }
