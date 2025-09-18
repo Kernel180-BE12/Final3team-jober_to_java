@@ -3,6 +3,7 @@ package com.example.final_projects.controller;
 import com.example.final_projects.config.swagger.ApiErrorCodeExample;
 import com.example.final_projects.dto.ApiResult;
 import com.example.final_projects.dto.PageResponse;
+import com.example.final_projects.dto.template.TemplateApproveResponse;
 import com.example.final_projects.dto.template.TemplateCreateRequest;
 import com.example.final_projects.dto.template.TemplateResponse;
 import com.example.final_projects.dto.template.TemplateSearchRequest;
@@ -54,6 +55,21 @@ public class TemplateController {
             @RequestBody TemplateCreateRequest templateCreateRequest
     ) {
         TemplateResponse response = templateService.createTemplate(principal.getId(), templateCreateRequest);
+        return ApiResult.ok(response);
+    }
+
+    @Operation(
+            summary = "템플릿 승인 요청",
+            description = "특정 템플릿에 대해 승인 요청을 보낸다."
+    )
+    @ApiErrorCodeExample(TemplateErrorCode.class)
+    @PostMapping("/{id}/approve-request")
+    public ApiResult<TemplateApproveResponse> approveTemplate(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserPrincipal principal
+    ) {
+        System.out.println(principal.getId());
+        TemplateApproveResponse response = templateService.approveTemplate(id, principal.getId());
         return ApiResult.ok(response);
     }
 }

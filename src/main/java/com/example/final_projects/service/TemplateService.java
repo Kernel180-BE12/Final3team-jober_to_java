@@ -1,11 +1,10 @@
 package com.example.final_projects.service;
 
 import com.example.final_projects.dto.PageResponse;
-import com.example.final_projects.dto.template.AiTemplateRequest;
-import com.example.final_projects.dto.template.AiTemplateResponse;
-import com.example.final_projects.dto.template.TemplateCreateRequest;
-import com.example.final_projects.dto.template.TemplateResponse;
+import com.example.final_projects.dto.template.*;
 import com.example.final_projects.entity.*;
+import com.example.final_projects.exception.TemplateException;
+import com.example.final_projects.exception.code.TemplateErrorCode;
 import com.example.final_projects.repository.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -208,5 +207,36 @@ public class TemplateService {
     private void markRequestFailed(UserTemplateRequest userRequest, Exception e) {
         userRequest.setStatus(UserTemplateRequestStatus.FAILED);
         userTemplateRequestRepository.save(userRequest);
+    }
+
+    @Transactional
+    public TemplateApproveResponse approveTemplate(Long templateId, Long userId) {
+        Template template = templateRepository.findById(templateId)
+                .orElseThrow(() -> new TemplateException(TemplateErrorCode.TEMPLATE_NOT_FOUND));
+
+        if (!template.getUserId().equals(userId)) {
+            throw new TemplateException(TemplateErrorCode.FORBIDDEN_TEMPLATE);
+        }
+
+        if (template.getStatus() == TemplateStatus.APPROVE_REQUESTED) {
+            throw new TemplateException(TemplateErrorCode.ALREADY_APPROVE_REQUESTED);
+        }
+
+        if (template.getStatus() != TemplateStatus.CREATED) {
+            throw new TemplateException(TemplateErrorCode.APPROVE_REQUEST_FORBIDDEN);
+        }
+
+        template.setStatus(TemplateStatus.APPROVE_REQUESTED);
+
+        templateRepository.save(template);
+
+        templateHistoryRepository.save(
+                TemplateHistory.builder()
+                        .template(template)
+                        .status(TemplateStatus.APPROVE_REQUESTED)
+                        .build()
+        );
+
+        return new TemplateApproveResponse(template.getId(), template.getStatus().name());
     }
 }
