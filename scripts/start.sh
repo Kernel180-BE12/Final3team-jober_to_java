@@ -9,5 +9,5 @@ if [ -n "$PID" ]; then
   kill -9 $PID
 fi
 
-nohup java -jar $JAR_FILE --spring.profiles.active=prod > $LOG_FILE 2>&1 &
+nohup java -Dspring.application.name=$APP_NAME -jar $JAR_FILE --spring.profiles.active=prod > $LOG_FILE 2>&1 &
 echo "Started $APP_NAME with prod profile"
