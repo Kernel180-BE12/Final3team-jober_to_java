@@ -1,6 +1,6 @@
 #!/bin/bash
 APP_NAME=jober-app
-JAR_FILE=/home/ubuntu/*.jar
+JAR_FILE=/home/ubuntu/target/*.jar
 LOG_FILE=/home/ubuntu/$APP_NAME.log
 
 PID=$(pgrep -f $APP_NAME)
