@@ -1,11 +1,44 @@
 spring:
-  datasource:
-    url: ${DB_URL}          # 예: jdbc:mysql://mysql:3306/appdb?useSSL=false&allowPublicKeyRetrieval=true
-    username: ${DB_USER}
-    password: ${DB_PASS}
   jpa:
     hibernate:
-      ddl-auto: validate    # 운영은 validate로 고정 (권장: Flyway와 함께 사용)
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        show_sql: false
+
   flyway:
     enabled: true
-    locations: classpath:db/migration,classpath:db/seed
+    validate-on-migrate: true
+    clean-disabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+  prometheus:
+    metrics:
+      export:
+        enabled: ${PROMETHEUS_ENABLED:false}
+
+logging:
+  level:
+    root: WARN
+    com.example.final_projects: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE_PATH:/var/log/app/application.log}
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+  forward-headers-strategy: framework
