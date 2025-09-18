@@ -38,5 +38,14 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             chmod +x /home/ubuntu/scripts/*.sh
+            
+            export DB_URL="${{ secrets.DB_URL }}"
+            export DB_USER="${{ secrets.DB_USER }}"
+            export DB_PASS="${{ secrets.DB_PASS }}"
+            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
+            export OTP_PEPPER="${{ secrets.OTP_PEPPER }}"
+            export REFRESH_PEPPER="${{ secrets.REFRESH_PEPPER }}"
+            export VERIFY_BASE_URL="${{ secrets.VERIFY_BASE_URL }}"
+            
             /home/ubuntu/scripts/stop.sh
             /home/ubuntu/scripts/start.sh
