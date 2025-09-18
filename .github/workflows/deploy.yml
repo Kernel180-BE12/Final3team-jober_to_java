@@ -48,4 +48,5 @@ jobs:
             export VERIFY_BASE_URL="${{ secrets.VERIFY_BASE_URL }}"
             
             /home/ubuntu/scripts/stop.sh
+            sleep 3
             /home/ubuntu/scripts/start.sh
