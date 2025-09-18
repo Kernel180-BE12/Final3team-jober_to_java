@@ -1,60 +1,90 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3307/appdb?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    username: root
-    password: rootpw
+    url: ${DB_URL:jdbc:mysql://localhost:3307/appdb?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${DB_USER:root}
+    password: ${DB_PASS:rootpw}
     hikari:
-      maximum-pool-size: 10
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:30000}
+      idle-timeout: ${DB_IDLE_TIMEOUT:600000}
+      max-lifetime: ${DB_MAX_LIFETIME:1800000}
 
   jpa:
     hibernate:
-      ddl-auto: update     # 개발 중에는 update, 운영에서는 validate 권장
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     open-in-view: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: ${HIBERNATE_FORMAT_SQL:false}
+        show_sql: ${HIBERNATE_SHOW_SQL:false}
         jdbc.time_zone: Asia/Seoul
+        dialect: org.hibernate.dialect.MySQL8Dialect
 
   jackson:
     time-zone: Asia/Seoul
+    serialization:
+      write-dates-as-timestamps: false
+
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: ${FLYWAY_LOCATIONS:classpath:db/migration,classpath:db/seed}
+    validate-on-migrate: true
+    clean-disabled: true
+
+jwt:
+  secret: ${JWT_SECRET:}
+  access-validity-ms: ${JWT_ACCESS_VALIDITY_MS:1800000}    # 기본값 30분
+  refresh-validity-ms: ${JWT_REFRESH_VALIDITY_MS:1209600000} # 기본값 14일
+
+security:
+  otp:
+    pepper: ${OTP_PEPPER:}
+    code-length: ${OTP_CODE_LENGTH:6}
+    ttl-seconds: ${OTP_TTL_SECONDS:300}
+    token-ttl-seconds: ${OTP_TOKEN_TTL_SECONDS:600}
+    resend-min-seconds: ${OTP_RESEND_MIN_SECONDS:60}
+    max-resend-per-hour: ${OTP_MAX_RESEND_PER_HOUR:5}
+    max-attempts: ${OTP_MAX_ATTEMPTS:5}
+
+  refresh:
+    pepper: ${REFRESH_PEPPER:}
+    validity-ms: ${REFRESH_VALIDITY_MS:1209600000}   # 기본값 14일
+
+  verify:
+    base-url: ${VERIFY_BASE_URL:http://localhost:8080}
+
+rest:
+  ai:
+    base-url: ${AI_BASE_URL:http://3.36.109.88:8000}
+    connect-timeout: ${AI_CONNECT_TIMEOUT:5000}
+    read-timeout: ${AI_READ_TIMEOUT:30000}
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
-
-server:
-  port: 8080
-
-  management:
-    endpoints:
-      web:
-        exposure:
-          include: health,mappings
-    endpoint:
-      health:
-        show-details: always
-
-rest:
-  ai:
-    base-url: http://3.36.109.88:8000
-
-security:
-  otp:
-    pepper: ${OTP_PEPPER}         # 환경변수/Secrets Manager로 주입 (필수)
-    code-length: 6
-    ttl-seconds: 300              # OTP 유효기간 5분
-    token-ttl-seconds: 600        # pre-signup 검증토큰 유효기간 10분
-    resend-min-seconds: 60        # 재발송 쿨다운(초)
-    max-resend-per-hour: 5
-    max-attempts: 5
-
-  refresh:
-    pepper: ${REFRESH_PEPPER:change-me-in-secrets}
-    validity-ms: 1209600000   # 14일 (예시)
+        include: ${MANAGEMENT_ENDPOINTS:health,info}
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: ${HEALTH_SHOW_DETAILS:when-authorized}
+  health:
+    db:
+      enabled: true
 
 logging:
   charset:
     console: UTF-8
     file: UTF-8
+  level:
+    root: ${LOG_LEVEL:INFO}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:WARN}
+    org.hibernate.SQL: ${SQL_LOG_LEVEL:WARN}
+    org.hibernate.type.descriptor.sql.BasicBinder: ${SQL_PARAM_LOG_LEVEL:WARN}
