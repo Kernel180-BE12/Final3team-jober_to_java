@@ -3,15 +3,23 @@ package com.example.final_projects.exception;
 import com.example.final_projects.dto.ApiResult;
 import com.example.final_projects.dto.ErrorResponse;
 import com.example.final_projects.exception.code.BaseErrorCode;
+import com.example.final_projects.exception.user.UserErrorCode;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import com.example.final_projects.exception.user.UserException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.HashMap;
+import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     private <T> ResponseEntity<ApiResult<T>> buildErrorResponse(HttpStatus status, String code, String message) {
         return ResponseEntity
@@ -58,4 +66,46 @@ public class GlobalExceptionHandler {
                 errorCode.getErrorReason().getMessage()
         );
     }
+
+    @ExceptionHandler(UserException.class)
+    public ResponseEntity<ApiResult<Object>> handleUser(UserException ex, HttpServletRequest req){
+        UserErrorCode ec = ex.getErrorCode();
+        String msg = (ex.getMessage() != null) ? ex.getMessage() : ec.getDefaultMessage();
+
+        if(ex.getDetails() != null) {
+            Object safe = sanitizeDetails(ex.getDetails());
+            log.warn("UserException path={} code={} status={} details={}",
+                    req.getRequestURI(), ec.code(), ec.getStatus().value(), safe);
+        }else{
+            log.warn("UserException path={} code={} status={}",
+                    req.getRequestURI(), ec.code(), ec.getStatus().value());
+        }
+        return buildErrorResponse(ec.getStatus(), ec.code(), msg);
+    }
+    private Object sanitizeDetails(Object details) {
+        if(details == null) return null;
+        if(details instanceof java.util.Map){
+            Map<?, ?> src = (Map<?, ?>) details;
+            Map<Object, Object> masked = new java.util.HashMap<>();
+            int i = 0;
+            for(Map.Entry<?, ?> e : src.entrySet()){
+                if (i++ > 20){ masked.put("_more", "..."); break;}
+                String key = String.valueOf(e.getKey()).toLowerCase();
+                if(key.contains("password") || key.contains("token") || key.contains("otp") || key.contains("secret")){
+                    masked.put(e.getKey(), "[REDACTED]");
+                } else {
+                    masked.put(e.getKey(), e.getValue());
+                }
+            }
+            return masked;
+        }
+        if(details instanceof CharSequence){
+            String s = details.toString();
+            s = s.replaceAll("([A-Za-z0-9._%+-])([A-Za-z0-9._%+-]*)@([A-Za-z0-9.-]+)", "$1***@$3");
+            if(s.length() > 500) s = s.substring(0, 500) + "...";
+            return s;
+        }
+        return details;
+    }
+
 }

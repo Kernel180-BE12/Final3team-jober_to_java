@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.sql.Ref;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/api/auth")
 public class AuthTokenController {
 
     private final TokenService tokenService;
