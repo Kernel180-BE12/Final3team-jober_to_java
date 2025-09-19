@@ -23,7 +23,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     // ⚠️ 실제 매핑에 따라 "/auth/**" 또는 "/api/auth/**" 로 맞추세요.
     private static final List<String> WHITELIST = List.of(
-            "/auth/**",
+            "/api/auth/**",
             "/actuator/**"
     );
 

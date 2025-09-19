@@ -10,6 +10,9 @@ import com.example.final_projects.support.OtpCrypto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.final_projects.exception.user.UserException;
+import com.example.final_projects.exception.user.UserErrorCode;
+
 
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -72,15 +75,21 @@ public class EmailOtpServiceImpl implements EmailOtpService{
         if (latest != null) {
             long sec = Duration.between(latest.getLastSentAt(), now).getSeconds();
             if (sec < resendMinSeconds) {
-                throw new IllegalArgumentException("재발송은 " + (resendMinSeconds - sec) + "초 후에 가능합니다.");
+                throw new UserException(
+                        UserErrorCode.OTP_COOLDOWN,
+                        "재발송은 " + (resendMinSeconds - sec) + "초 후에 가능합니다.",
+                        java.util.Map.of("retryAfterSec", resendMinSeconds - sec));
             }
             if (latest.getResendCount() >= maxResendPerHour &&
                     Duration.between(latest.getLastSentAt(), now).toHours() < 1) {
-                throw new IllegalArgumentException("재발송 한도를 초과했습니다. 잠시 후 다시 시도하세요.");
+                throw new UserException(
+                        UserErrorCode.RATE_LIMIT_EXCEEDED,
+                        "재발송 한도를 초과했습니다. 잠시 후 다시 시도하세요.",
+                        java.util.Map.of("resendCount", latest.getResendCount(), "maxPerHour", maxResendPerHour));
             }
         }
-
-        String code = genNumeric(codeLength);                 // 예: "493201"
+        String code = "123456";
+        //String code = genNumeric(codeLength);     //데모 시 otp를 123456으로 고정하기 위해 주석처리            // 예: "493201"
         String hash = otpCrypto.sha256WithPepper(code, pepper);
 
         EmailOtp row = new EmailOtp();
@@ -110,16 +119,22 @@ public class EmailOtpServiceImpl implements EmailOtpService{
         EmailOtp candidate = otpRepo.findAllByEmailOrderByIdDesc(email).stream()
                 .filter(e -> !e.isVerified() && e.getExpiresAt().isAfter(now))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("유효한 OTP가 없습니다. 다시 발송해 주세요."));
+                .orElseThrow(() -> new UserException(
+                        UserErrorCode.OTP_INVALID,
+                        "유효한 OTP가 없습니다. 다시 발송해 주세요.",
+                        java.util.Map.of("emailHint", email.replaceAll("(^.).*(@.*$)", "$1***$2"))));
 
         if (candidate.getAttemptCount() >= maxAttempts) {
-            throw new IllegalArgumentException("시도 한도를 초과했습니다. OTP를 재발송해 주세요.");
+            throw new UserException(
+                    UserErrorCode.RATE_LIMIT_EXCEEDED,
+                    "시도 한도를 초과했습니다. OTP를 재발송해 주세요.",
+                    java.util.Map.of("attempts", candidate.getAttemptCount(), "maxAttempts", maxAttempts));
         }
         otpRepo.incrementAttempt(candidate.getId());
 
         // 해시 비교(상수시간 비교)
         if (!otpCrypto.verify(code, candidate.getCodeHash(), pepper)) {
-            throw new IllegalArgumentException("OTP 코드가 올바르지 않습니다.");
+            throw new UserException(UserErrorCode.OTP_INVALID,"OTP 코드가 올바르지 않습니다.");
         }
 
         // ✅ 핵심: pre-signup 검증토큰을 기존 테이블(VerifyEmailToken)에 INSERT
@@ -141,19 +156,22 @@ public class EmailOtpServiceImpl implements EmailOtpService{
 
         long expiresIn = Duration.between(now, vexp).getSeconds();
         return new VerifyOtpResponse(vtoken, expiresIn);}
+
     @Override
     public void assertValidVerificationTokenForSignup(String email, String verificationToken){
         String normEmail = norm(email);
         VerifyEmailToken t = tokenRepo.findByToken(verificationToken)
-                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 이메일 검증 토큰입니다."));
+                .orElseThrow(() -> new UserException(
+                        UserErrorCode.VALIDATION_ERROR,
+                        "유효하지 않은 이메일 검증 토큰입니다."));
 
         // 아래 접근자들(getEmail/isPreSignup 등)이 엔티티에 구현되어 있어야 함
-        if (t.isUsed()) throw new IllegalArgumentException("이미 사용된 검증 토큰입니다.");
-        if (!t.isPreSignup()) throw new IllegalArgumentException("가입 전 검증용 토큰이 아닙니다.");
+        if (t.isUsed()) throw new UserException(UserErrorCode.VALIDATION_ERROR ,"이미 사용된 검증 토큰입니다.");
+        if (!t.isPreSignup()) throw new UserException(UserErrorCode.VALIDATION_ERROR ,"가입 전 검증용 토큰이 아닙니다.");
         if (t.getExpiresAt() == null || t.getExpiresAt().isBefore(LocalDateTime.now()))
-            throw new IllegalArgumentException("검증 토큰이 만료되었습니다.");
+            throw new UserException(UserErrorCode.TOKEN_EXPIRED ,"검증 토큰이 만료되었습니다.");
         if (t.getEmail() == null || !t.getEmail().equalsIgnoreCase(normEmail))
-            throw new IllegalArgumentException("이메일과 검증 토큰이 일치하지 않습니다.");
+            throw new UserException(UserErrorCode.VALIDATION_ERROR ,"이메일과 검증 토큰이 일치하지 않습니다.");
     }
 
     private String norm(String email){ return email.trim().toLowerCase(); }

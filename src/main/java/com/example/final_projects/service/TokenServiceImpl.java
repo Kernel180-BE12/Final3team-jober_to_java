@@ -2,6 +2,8 @@ package com.example.final_projects.service;
 
 import com.example.final_projects.dto.auth.RefreshTokenDtos.RefreshResponse;
 import com.example.final_projects.entity.RefreshToken;
+import com.example.final_projects.exception.user.UserErrorCode;
+import com.example.final_projects.exception.user.UserException;
 import com.example.final_projects.repository.RefreshTokenRepository;
 import com.example.final_projects.security.JwtTokenProvider;
 import com.example.final_projects.security.TokenHashUtil;
@@ -38,21 +40,29 @@ public class TokenServiceImpl implements TokenService {
         // 1) 제출된 RT 해시화 → 조회
         String hash = TokenHashUtil.sha256HexWithPepper(pepper, refreshTokenRaw);
         RefreshToken current = refreshTokenRepository.findByTokenHash(hash)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
+                .orElseThrow(() -> new UserException(UserErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
         // 2) 재사용/만료 차단
         if (current.isRevoked() || current.getReplacedByJti() != null) {
-            throw new IllegalStateException("Refresh token reuse detected");
+            throw new UserException(
+                    UserErrorCode.REFRESH_TOKEN_REUSED,
+                    "재사용이 감지된 리프레시 토큰입니다.",
+                    java.util.Map.of("jti", current.getJti())
+            );
         }
         if (current.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Refresh token expired");
+            throw new UserException(UserErrorCode.TOKEN_EXPIRED);
         }
 
         // 3) 조건부 회전(동시성 제어)
         String newJti = UUID.randomUUID().toString();
         int updated = refreshTokenRepository.markRotated(current.getJti(), newJti);
         if (updated != 1) {
-            throw new IllegalStateException("Refresh token reuse detected");
+            throw new UserException(
+                    UserErrorCode.REFRESH_TOKEN_REUSED,
+                    "재사용이 감지된 리프레시 토큰입니다.",
+                    java.util.Map.of("jti", current.getJti(), "currentReplacedByJti", current.getReplacedByJti())
+            );
         }
 
         // 4) 새 AT/RT 발급

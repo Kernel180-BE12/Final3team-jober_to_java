@@ -14,6 +14,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.final_projects.exception.user.UserException;
+import com.example.final_projects.exception.user.UserErrorCode;
+
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -70,7 +73,7 @@ import java.util.UUID;
             final String email = req.getEmail().trim().toLowerCase();
             emailOtpService.assertValidVerificationTokenForSignup(email, req.getEmailVerificationToken());
             if (userRepository.existsByEmail(email)) {
-                throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+                throw new UserException(UserErrorCode.EMAIL_DUPLICATE);
             }
 
             User user = new User();
@@ -111,11 +114,11 @@ import java.util.UUID;
 
             int used = verifyEmailTokenRepository.markUsedByToken(req.getEmailVerificationToken());
             if (used != 1) {
-                throw new IllegalStateException("검증 토큰 소진 실패");
+                throw new UserException(UserErrorCode.INTERNAL_ERROR, "검증 토큰 소진 실패");
             }
 
             VerifyEmailToken fresh = verifyEmailTokenRepository.findByToken(req.getEmailVerificationToken())
-                    .orElseThrow(() -> new IllegalStateException("토큰 재조회 실패"));
+                    .orElseThrow(() -> new UserException(UserErrorCode.INTERNAL_ERROR, "토큰 재조회 실패"));
 
             fresh.setUser(user);
             try {
@@ -141,15 +144,15 @@ import java.util.UUID;
         public LoginResponse login(LoginRequest req) {
             String email = req.getEmail().trim().toLowerCase();
             User user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new IllegalArgumentException("이메일 또는 비밀번호가 올바르지 않습니다."));
+                    .orElseThrow(() -> new UserException(UserErrorCode.LOGIN_FAILED));
 
             // (선택) 상태/잠금 간단 체크
             if (getBoolean(user, "locked")) {
-                throw new IllegalArgumentException("계정이 잠금 상태입니다. 관리자에게 문의하세요.");
+                throw new UserException(UserErrorCode.ACCOUNT_LOCKED);
             }
 
             if (!"ACTIVE".equals(user.getStatus().name())){
-                throw new IllegalArgumentException("이메일 인증이 완료되지 않았습니다.");
+                throw new UserException(UserErrorCode.EMAIL_NOT_VERIFIED);
             }
 
             String raw = req.getPassword();
@@ -162,7 +165,7 @@ import java.util.UUID;
                     setBoolean(user, "locked", true);
                     setDateTime(user, "lockedAt", LocalDateTime.now());
                 }
-                throw new IllegalArgumentException("이메일 또는 비밀번호가 올바르지 않습니다.");
+                throw new UserException(UserErrorCode.LOGIN_FAILED);
             }
 
             // 성공 처리
@@ -205,7 +208,7 @@ import java.util.UUID;
     @Override
     public void verifyEmail(VerifyEmailRequest request){
         var token = verifyEmailTokenRepository.findByToken(request.getToken())
-                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 인증 토큰입니다."));
+                .orElseThrow(() -> new UserException(UserErrorCode.VALIDATION_ERROR ,"유효하지 않은 인증 토큰입니다."));
 
         // ✅ pre-signup 토큰은 여기서 금지 (가입 요청에 포함해야 함)
         try {
@@ -214,18 +217,21 @@ import java.util.UUID;
             // Object 리턴이므로 안전하게 Boolean 처리
             boolean pre = Boolean.TRUE.equals(preField.get(token));
             if (pre) {
-                throw new IllegalArgumentException("이 토큰은 '회원가입 전 검증'용입니다. 회원가입 요청에 포함해 주세요.");
+                throw new UserException(UserErrorCode.VALIDATION_ERROR ,"이 토큰은 '회원가입 전 검증'용입니다. 회원가입 요청에 포함해 주세요.");
             }
         } catch (NoSuchFieldException | IllegalAccessException ignored) {
             // 엔티티 구조가 달라졌거나 접근 실패 시엔 그냥 가드 건너뜀 (겸용 환경에서만)
         }
 
-        if (token.isUsed()) throw new IllegalArgumentException("이미 사용된 인증 토큰입니다.");
+        if (token.isUsed()) throw new UserException(UserErrorCode.VALIDATION_ERROR,"이미 사용된 인증 토큰입니다.");
         if (token.getExpiresAt() == null || token.getExpiresAt().isBefore(LocalDateTime.now()))
-            throw new IllegalArgumentException("인증 토큰이 만료되었습니다.");
+            throw new UserException(UserErrorCode.TOKEN_EXPIRED,"인증 토큰이 만료되었습니다.");
 
         var user = token.getUser();
-        if (user == null) throw new IllegalStateException("이 토큰에는 연결된 사용자가 없습니다.");
+        if (user == null) throw new UserException(
+                UserErrorCode.INTERNAL_ERROR,
+                "이 토큰에는 연결된 사용자가 없습니다.",
+                java.util.Map.of("token", request.getToken()));
 
         try{
             var statusField = User.class.getDeclaredField("status");

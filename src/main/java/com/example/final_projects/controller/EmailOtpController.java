@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/auth/email/otp")
+@RequestMapping("/api/auth/email/otp")
 public class EmailOtpController {
     private final EmailOtpService emailOtpService;
 
