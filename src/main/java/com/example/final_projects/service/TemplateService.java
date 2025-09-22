@@ -75,7 +75,7 @@ public class TemplateService {
         UserTemplateRequest userRequest = createUserTemplateRequest(userId, request);
 
         try {
-            AiTemplateResponse aiResponse = aiRestClient.createTemplate(userId, request.getRequestContent());
+            AiTemplateResponse aiResponse = aiRestClient.createTemplate(userRequest);
 
             Template template = createAndSaveTemplate(userId, aiResponse, userRequest);
 
