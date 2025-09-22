@@ -2,22 +2,21 @@ package com.example.final_projects.controller;
 
 import com.example.final_projects.dto.auth.RefreshTokenDtos.RefreshResponse;
 import com.example.final_projects.dto.auth.RefreshTokenDtos.RefreshRequest;
-import com.example.final_projects.service.TokenService;
 import org.springframework.http.ResponseEntity;
+import com.example.final_projects.service.TokenServiceImpl;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.sql.Ref;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthTokenController {
 
-    private final TokenService tokenService;
+    private final TokenServiceImpl tokenService;
 
-    public AuthTokenController(TokenService tokenService) {
+    public AuthTokenController(TokenServiceImpl tokenService) {
         this.tokenService = tokenService;
     }
 
@@ -27,4 +26,3 @@ public class AuthTokenController {
         return ResponseEntity.ok(res);
     }
 }
-

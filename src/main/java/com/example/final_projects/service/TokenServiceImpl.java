@@ -18,7 +18,7 @@ import java.util.UUID;
 
 @Service
 @Transactional
-public class TokenServiceImpl implements TokenService {
+public class TokenServiceImpl {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtTokenProvider jwtTokenProvider;
@@ -35,7 +35,6 @@ public class TokenServiceImpl implements TokenService {
         this.refreshValidityMs = refreshValidityMs;
     }
 
-    @Override
     public RefreshResponse refresh(String refreshTokenRaw) {
         // 1) 제출된 RT 해시화 → 조회
         String hash = TokenHashUtil.sha256HexWithPepper(pepper, refreshTokenRaw);

@@ -26,7 +26,7 @@ import java.util.UUID;
 
 @Service
     @Transactional
-    public class AuthServiceImpl implements AuthService {
+    public class AuthServiceImpl {
 
         private final UserRepository userRepository;
         private final RefreshTokenRepository refreshTokenRepository;
@@ -68,7 +68,7 @@ import java.util.UUID;
          * 3) 저장 후 ID 반환
          * - 주의: 이메일 대소문자 정규화(선택), UNIQUE 제약 충돌 예외 처리
          */
-        @Override
+
         public SignupResponse signup(SignupRequest req) {
             final String email = req.getEmail().trim().toLowerCase();
             emailOtpService.assertValidVerificationTokenForSignup(email, req.getEmailVerificationToken());
@@ -140,7 +140,6 @@ import java.util.UUID;
          * 4) AccessToken/RefreshToken 발급
          * 5) RefreshToken 영속화 (만료일 + revoked=false)
          */
-        @Override
         public LoginResponse login(LoginRequest req) {
             String email = req.getEmail().trim().toLowerCase();
             User user = userRepository.findByEmail(email)
@@ -198,14 +197,12 @@ import java.util.UUID;
          * - 전달된 RefreshToken을 찾아 revoked=true 로 전환
          * - 토큰이 DB에 없으면 조용히 종료(보안상 동일 응답 유지)
          */
-        @Override
         public void logout(LogoutRequest req) {
             String hash = TokenHashUtil.sha256HexWithPepper(refreshPepper, req.getRefreshToken());
             refreshTokenRepository.findByTokenHash(hash)
                     .ifPresent(rt -> rt.setRevoked(true));
         }
 
-    @Override
     public void verifyEmail(VerifyEmailRequest request){
         var token = verifyEmailTokenRepository.findByToken(request.getToken())
                 .orElseThrow(() -> new UserException(UserErrorCode.VALIDATION_ERROR ,"유효하지 않은 인증 토큰입니다."));

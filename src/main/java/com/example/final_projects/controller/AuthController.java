@@ -2,15 +2,15 @@ package com.example.final_projects.controller;
 
 import com.example.final_projects.dto.ApiResult;
 import com.example.final_projects.dto.auth.*;
-import com.example.final_projects.service.AuthService;
+import com.example.final_projects.service.AuthServiceImpl;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    private final AuthService authService;
-    public AuthController(AuthService authService){ this.authService=authService; }
+    private final AuthServiceImpl authService;
+    public AuthController(AuthServiceImpl authService){ this.authService=authService; }
 
     @PostMapping("/signup")
     public ApiResult<SignupResponse> signup(@Valid @RequestBody SignupRequest req){
