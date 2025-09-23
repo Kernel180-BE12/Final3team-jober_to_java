@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.example.final_projects.exception.user.UserException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
@@ -108,4 +107,13 @@ public class GlobalExceptionHandler {
         return details;
     }
 
+    @ExceptionHandler(AiException.class)
+    public ResponseEntity<ApiResult<Object>> handleAiException(AiException ex) {
+        BaseErrorCode errorCode = ex.getErrorCode();
+        return buildErrorResponse(
+                HttpStatus.valueOf(errorCode.getErrorReason().getStatus()),
+                errorCode.getErrorReason().getCode(),
+                errorCode.getErrorReason().getMessage()
+        );
+    }
 }
