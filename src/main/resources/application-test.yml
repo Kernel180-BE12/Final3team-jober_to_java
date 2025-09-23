@@ -1,0 +1,12 @@
+jwt:
+  secret: bqRgdYiJ8PphtR0lZhoo8Rzch+TJechjMOyF9+j8pSQ=
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      aiService:
+        slidingWindowSize: 3
+        minimumNumberOfCalls: 1
+        failureRateThreshold: 50
+        waitDurationInOpenState: 1s
+        permittedNumberOfCallsInHalfOpenState: 1

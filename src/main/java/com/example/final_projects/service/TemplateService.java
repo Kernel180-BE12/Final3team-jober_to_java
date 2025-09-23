@@ -11,7 +11,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,7 +21,7 @@ public class TemplateService {
 
     private final TemplateRepository templateRepository;
     private final TemplateHistoryRepository templateHistoryRepository;
-    private final RestClient restClient;
+    private final AiRestClient aiRestClient;
     private final TemplateButtonRepository templateButtonRepository;
     private final TemplateVariableRepository templateVariableRepository;
     private final UserTemplateRequestRepository userTemplateRequestRepository;
@@ -32,7 +31,7 @@ public class TemplateService {
     public TemplateService(
             TemplateRepository templateRepository,
             TemplateHistoryRepository templateHistoryRepository,
-            RestClient restClient,
+            AiRestClient aiRestClient,
             TemplateButtonRepository templateButtonRepository,
             TemplateVariableRepository templateVariableRepository,
             UserTemplateRequestRepository userTemplateRequestRepository,
@@ -41,7 +40,7 @@ public class TemplateService {
     ) {
         this.templateRepository = templateRepository;
         this.templateHistoryRepository = templateHistoryRepository;
-        this.restClient = restClient;
+        this.aiRestClient = aiRestClient;
         this.templateButtonRepository = templateButtonRepository;
         this.templateVariableRepository = templateVariableRepository;
         this.userTemplateRequestRepository = userTemplateRequestRepository;
@@ -76,7 +75,7 @@ public class TemplateService {
         UserTemplateRequest userRequest = createUserTemplateRequest(userId, request);
 
         try {
-            AiTemplateResponse aiResponse = requestAiTemplate(userId, request);
+            AiTemplateResponse aiResponse = aiRestClient.createTemplate(userRequest);
 
             Template template = createAndSaveTemplate(userId, aiResponse, userRequest);
 
@@ -99,19 +98,6 @@ public class TemplateService {
                 .status(UserTemplateRequestStatus.PENDING)
                 .build();
         return userTemplateRequestRepository.save(userRequest);
-    }
-
-    private AiTemplateResponse requestAiTemplate(Long userId, TemplateCreateRequest request) {
-        AiTemplateResponse aiResponse = restClient.post()
-                .uri("/ai/templates")
-                .body(new AiTemplateRequest(userId, request.getRequestContent()))
-                .retrieve()
-                .body(AiTemplateResponse.class);
-
-        if (aiResponse == null) {
-            throw new IllegalStateException("AI 서버 응답이 없습니다");
-        }
-        return aiResponse;
     }
 
     private Template createAndSaveTemplate(Long userId, AiTemplateResponse aiResponse, UserTemplateRequest userRequest) {
