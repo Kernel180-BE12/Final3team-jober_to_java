@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -27,33 +26,24 @@ public class TemplateService {
     private final TemplateRepository templateRepository;
     private final TemplateHistoryRepository templateHistoryRepository;
     private final AiRestClient aiRestClient;
-    private final TemplateButtonRepository templateButtonRepository;
-    private final TemplateVariableRepository templateVariableRepository;
-    private final IndustryRepository industryRepository;
-    private final PurposeRepository purposeRepository;
     private final FailureLogService failureLogService;
     private final UserTemplateRequestService userTemplateRequestService;
+    private final TemplateFactory templateFactory;
 
     public TemplateService(
             TemplateRepository templateRepository,
             TemplateHistoryRepository templateHistoryRepository,
             AiRestClient aiRestClient,
-            TemplateButtonRepository templateButtonRepository,
-            TemplateVariableRepository templateVariableRepository,
-            IndustryRepository industryRepository,
-            PurposeRepository purposeRepository,
             FailureLogService failureLogService,
-            UserTemplateRequestService userTemplateRequestService
+            UserTemplateRequestService userTemplateRequestService,
+            TemplateFactory templateFactory
     ) {
         this.templateRepository = templateRepository;
         this.templateHistoryRepository = templateHistoryRepository;
         this.aiRestClient = aiRestClient;
-        this.templateButtonRepository = templateButtonRepository;
-        this.templateVariableRepository = templateVariableRepository;
-        this.industryRepository = industryRepository;
-        this.purposeRepository = purposeRepository;
         this.failureLogService = failureLogService;
         this.userTemplateRequestService = userTemplateRequestService;
+        this.templateFactory = templateFactory;
     }
 
     @Transactional(readOnly = true)
@@ -96,7 +86,7 @@ public class TemplateService {
         AiTemplateResponse aiTemplateData = aiResponseWrapper.data();
 
         if (responseEntity.getStatusCode() == HttpStatus.OK) {
-            Template template = createAndSaveTemplate(userId, aiTemplateData, userRequest);
+            Template template = templateFactory.createFrom(userId, aiTemplateData, userRequest);
             saveTemplateHistory(template);
             userTemplateRequestService.markAsCompleted(userRequest.getId());
             return new TemplateCreationResult.Complete(TemplateResponse.from(template));
@@ -107,77 +97,6 @@ public class TemplateService {
         else {
             throw new IllegalStateException("Unexpected success status code: " + responseEntity.getStatusCode());
         }
-    }
-
-    private Template createAndSaveTemplate(Long userId, AiTemplateResponse aiResponse, UserTemplateRequest userRequest) {
-        Template template = Template.builder()
-                .userId(userId)
-                .categoryId(aiResponse.categoryId())
-                .title(aiResponse.title())
-                .content(aiResponse.content())
-                .imageUrl(aiResponse.imageUrl())
-                .type(TemplateType.valueOf(aiResponse.type()))
-                .isPublic(aiResponse.isPublic())
-                .status(TemplateStatus.CREATED)
-                .userTemplateRequest(userRequest)
-                .build();
-
-        List<TemplateButton> newButtons = mapButtonsFromDto(aiResponse);
-        List<TemplateVariable> newVariables = mapVariablesFromDto(aiResponse);
-        template.addButtons(newButtons);
-        template.addVariables(newVariables);
-        saveTemplateIndustries(template, aiResponse);
-        saveTemplatePurposes(template, aiResponse);
-
-        return templateRepository.save(template);
-    }
-
-    private List<TemplateButton> mapButtonsFromDto(AiTemplateResponse aiResponse) {
-        if (aiResponse.buttons() == null || aiResponse.buttons().isEmpty()) return new ArrayList<>();
-
-        return aiResponse.buttons().stream()
-                .map(b -> TemplateButton.builder()
-                        .name(b.name())
-                        .ordering(b.ordering())
-                        .linkMo(b.linkMo())
-                        .linkPc(b.linkPc())
-                        .linkAnd(b.linkAnd())
-                        .linkIos(b.linkIos())
-                        .linkType(b.linkType())
-                        .build())
-                .toList();
-    }
-
-    private List<TemplateVariable> mapVariablesFromDto(AiTemplateResponse aiResponse) {
-        if (aiResponse.variables() == null || aiResponse.variables().isEmpty()) return new ArrayList<>();
-
-        return aiResponse.variables().stream()
-                .map(v -> TemplateVariable.builder()
-                        .variableKey(v.variableKey())
-                        .placeholder(v.placeholder())
-                        .inputType(v.inputType())
-                        .build())
-                .toList();
-    }
-
-    private void saveTemplateIndustries(Template template, AiTemplateResponse aiResponse) {
-        if (aiResponse.industries() == null) return;
-
-        aiResponse.industries().forEach(i -> {
-            Industry industry = industryRepository.findById(i.id())
-                    .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + i.id()));
-            template.getIndustries().add(industry);
-        });
-    }
-
-    private void saveTemplatePurposes(Template template, AiTemplateResponse aiResponse) {
-        if (aiResponse.purposes() == null) return;
-
-        aiResponse.purposes().forEach(p -> {
-            Purpose purpose = purposeRepository.findById(p.id())
-                    .orElseThrow(() -> new IllegalArgumentException("Purpose not found: " + p.id()));
-            template.getPurposes().add(purpose);
-        });
     }
 
     private void saveTemplateHistory(Template template) {
