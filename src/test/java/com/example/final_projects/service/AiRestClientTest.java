@@ -1,34 +1,35 @@
 package com.example.final_projects.service;
 
-import com.example.final_projects.dto.template.AiTemplateRequest;
-import com.example.final_projects.dto.template.AiTemplateResponse;
 import com.example.final_projects.entity.UserTemplateRequest;
-import com.example.final_projects.entity.UserTemplateRequestStatus;
+import com.example.final_projects.support.MailService;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.RestClient;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import java.time.Duration;
+import java.util.stream.IntStream;
 
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.assertj.core.api.BDDAssertions.then;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ActiveProfiles("test")
 @SpringBootTest
-@Import(AiRestClient.class)
 class AiRestClientTest {
 
     @Autowired
@@ -40,64 +41,59 @@ class AiRestClientTest {
     @Value("${resilience4j.circuitbreaker.instances.aiService.waitDurationInOpenState}")
     private Duration waitDuration;
 
+    @TestConfiguration
+    static class TestConfig {
+        @Bean
+        public MailService mailService() {
+            return Mockito.mock(MailService.class);
+        }
+    }
+
     @RegisterExtension
     static WireMockExtension wireMock = WireMockExtension.newInstance()
-            .options(wireMockConfig().port(8000))
+            .options(wireMockConfig().dynamicPort())
             .build();
 
-    private RestClient restClient() {
-        return RestClient.builder()
-                .baseUrl("http://localhost:" + wireMock.getPort())
-                .build();
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("rest.ai.base-url", wireMock::baseUrl);
     }
 
-    private void stub500Error(String url) {
-        wireMock.stubFor(WireMock.post(url)
-                .willReturn(WireMock.aResponse()
-                        .withStatus(500)
-                        .withBody("Internal Server Error")));
+    @BeforeEach
+    void setUp() {
+        circuitBreakerRegistry.circuitBreaker("aiService").reset();
     }
 
     @Test
-    void InternalServerError_예외가_발생해야_한다() {
-        stub500Error("/ai/templates");
+    @DisplayName("연속된 실패 이후 CircuitBreaker가 OPEN 상태가 되어 fallback이 동작해야 한다")
+    void circuitBreaker_should_open_after_consecutive_failures() {
+        // given: AI 서버가 계속 503 서버 에러를 반환하도록 설정
+        wireMock.stubFor(WireMock.post("/ai/templates")
+                .willReturn(WireMock.serverError().withStatus(503)));
 
-        Throwable thrown = catchThrowable(() -> restClient().post()
-                .uri("/ai/templates")
-                .body(new AiTemplateRequest(123L, "테스트 내용"))
-                .retrieve()
-                .body(AiTemplateResponse.class));
-
-        then(thrown).as("서버가 500을 반환하면 InternalServerError 예외가 발생해야 한다")
-                .isInstanceOf(HttpServerErrorException.InternalServerError.class);
-    }
-
-    @Test
-    void 연속된_실패_이후_CircuitBreaker가_OPEN_상태가_되어야_한다() {
         CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker("aiService");
+        int failureThreshold = cb.getCircuitBreakerConfig().getMinimumNumberOfCalls();
 
-        cb.getEventPublisher()
-                .onStateTransition(event -> System.out.println("[CB] 상태 전환: " + event.getStateTransition()))
-                .onError(event -> System.out.println("[CB] 호출 실패: " + event.getEventType()));
+        // when: 임계치만큼 일부러 실패를 발생시킴
+        IntStream.range(0, failureThreshold).forEach(i -> {
+            try {
+                aiRestClient.createTemplate(UserTemplateRequest.builder().userId(1L).requestContent("fail").build());
+            } catch (Exception e) {
 
-        for (int i = 0; i < 5; i++) {
-            UserTemplateRequest userRequest = UserTemplateRequest.builder()
-                    .userId(1L)
-                    .requestContent("fail-case")
-                    .status(UserTemplateRequestStatus.PENDING) // 기본값
-                    .build();
+            }
+        });
 
-            assertThrows(RuntimeException.class, () ->
-                    aiRestClient.createTemplate(userRequest));
-        }
+        // then: 임계치를 넘었으므로, 다음 호출은 폴백(fallback)이 동작해야 함
+        UserTemplateRequest finalRequest = UserTemplateRequest.builder().userId(103L).requestContent("final-call").build();
+        ResponseEntity<?> responseEntity = aiRestClient.createTemplate(finalRequest);
 
-        assertThat(cb.getState())
-                .as("CircuitBreaker는 연속 실패 후 OPEN 상태가 되어야 한다")
-                .isEqualTo(CircuitBreaker.State.OPEN);
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.OPEN);
     }
 
     @Test
-    void waitDuration이_지난_후_HALF_OPEN_상태로_전환되어야_한다() throws InterruptedException {
+    @DisplayName("waitDuration이 지난 후 HALF_OPEN 상태로 전환되어야 한다")
+    void waitDuration_should_transition_to_half_open() throws InterruptedException {
         CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker("aiService");
         cb.transitionToOpenState();
 
