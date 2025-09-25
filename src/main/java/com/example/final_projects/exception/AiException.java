@@ -11,4 +11,14 @@ public class AiException extends RuntimeException {
         super(errorCode.getErrorReason().getMessage());
         this.errorCode = errorCode;
     }
+
+    public AiException(BaseErrorCode errorCode, String message) {
+        super(message);
+        this.errorCode = errorCode;
+    }
+
+    public AiException(BaseErrorCode errorCode, String message, Throwable cause) {
+        super(message, cause);
+        this.errorCode = errorCode;
+    }
 }

@@ -26,6 +26,9 @@ public class TemplateButton {
 
     private Integer ordering;
 
+    @Column(name = "link_mo", length = 500)
+    private String linkMo;
+
     @Column(name = "link_pc", length = 500)
     private String linkPc;
 
@@ -34,6 +37,9 @@ public class TemplateButton {
 
     @Column(name = "link_ios", length = 500)
     private String linkIos;
+
+    @Column(name = "link_type", length = 10)
+    private String linkType;
 
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;

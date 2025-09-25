@@ -18,11 +18,10 @@ public class UserTemplateRequestFailureLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_template_request_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
-    private UserTemplateRequest userTemplateRequest;
+    @Column(name = "user_template_request_id")
+    private Long userTemplateRequestId;
 
-    @Column(name = "error_code", length = 10)
+    @Column(name = "error_code", length = 50)
     private String errorCode;
 
     @Column(name = "error_detail", columnDefinition = "TEXT")

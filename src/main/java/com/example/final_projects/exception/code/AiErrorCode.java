@@ -6,7 +6,18 @@ import org.springframework.http.HttpStatus;
 
 @Getter
 public enum AiErrorCode implements BaseErrorCode {
-    AI_REQUEST_FAILED(HttpStatus.BAD_GATEWAY.value(), "AI 서버 호출에 실패했습니다");
+    // AI 서버와 1:1 매핑
+    PROFANITY_DETECTED(HttpStatus.BAD_REQUEST.value(), "부적절한 언어가 감지되었습니다."),
+    POLICY_VIOLATION(HttpStatus.BAD_REQUEST.value(), "정책에 위반되는 내용이 포함되었습니다."),
+    VALIDATION_ERROR(HttpStatus.UNPROCESSABLE_ENTITY.value(), "입력값 검증에 실패했습니다."),
+    PROCESSING_TIMEOUT(HttpStatus.REQUEST_TIMEOUT.value(), "AI 서버 처리 시간이 초과되었습니다."),
+    API_QUOTA_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS.value(),"API 할당량을 초과했습니다."),
+    TEMPLATE_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR.value(), "템플릿 생성에 실패했습니다."),
+
+    // Spring Boot 서버 내부 정의
+    AI_REQUEST_FAILED(HttpStatus.INTERNAL_SERVER_ERROR.value(), "AI 서버 요청에 실패했습니다."),
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE.value(), "AI 서비스를 현재 사용할 수 없습니다."),
+    UNEXPECTED_AI_RESPONSE(HttpStatus.INTERNAL_SERVER_ERROR.value(), "AI 서버로부터 예상치 못한 응답을 받았습니다.");
 
     private final ErrorReason errorReason;
 

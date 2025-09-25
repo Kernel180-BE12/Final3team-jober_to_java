@@ -1,0 +1,1 @@
+ALTER TABLE user_template_request_failure_log MODIFY COLUMN error_code VARCHAR(50) NULL;

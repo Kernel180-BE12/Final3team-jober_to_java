@@ -73,7 +73,7 @@ public class Template {
     @Builder.Default
     private List<TemplateHistory> histories = new ArrayList<>();
 
-    @ManyToMany
+    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE })
     @JoinTable(
             name = "template_industry",
             joinColumns = @JoinColumn(name = "template_id"),
@@ -82,7 +82,7 @@ public class Template {
     @Builder.Default
     private Set<Industry> industries = new HashSet<>();
 
-    @ManyToMany
+    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE })
     @JoinTable(
             name = "template_purpose",
             joinColumns = @JoinColumn(name = "template_id"),
@@ -90,4 +90,20 @@ public class Template {
     )
     @Builder.Default
     private Set<Purpose> purposes = new HashSet<>();
+
+    public void addButtons(List<TemplateButton> buttons) {
+        this.buttons.clear();
+        if (buttons != null) {
+            this.buttons.addAll(buttons);
+            buttons.forEach(button -> button.setTemplate(this)); // 양방향 관계 설정
+        }
+    }
+
+    public void addVariables(List<TemplateVariable> variables) {
+        this.variables.clear();
+        if (variables != null) {
+            this.variables.addAll(variables);
+            variables.forEach(variable -> variable.setTemplate(this)); // 양방향 관계 설정
+        }
+    }
 }

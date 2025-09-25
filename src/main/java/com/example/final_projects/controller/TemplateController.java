@@ -9,9 +9,13 @@ import com.example.final_projects.dto.template.TemplateResponse;
 import com.example.final_projects.dto.template.TemplateSearchRequest;
 import com.example.final_projects.exception.code.TemplateErrorCode;
 import com.example.final_projects.security.CustomUserPrincipal;
+import com.example.final_projects.service.TemplateCreationResult;
 import com.example.final_projects.service.TemplateService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -50,12 +54,30 @@ public class TemplateController {
     }
 
     @PostMapping
-    public ApiResult<TemplateResponse> createTemplate(
+    public ResponseEntity<?> createTemplate(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @RequestBody TemplateCreateRequest templateCreateRequest
+            @RequestBody TemplateCreateRequest templateCreateRequest,
+            HttpServletRequest httpServletRequest
     ) {
-        TemplateResponse response = templateService.createTemplate(principal.getId(), templateCreateRequest);
-        return ApiResult.ok(response);
+        String clientIp = httpServletRequest.getRemoteAddr();
+        String userAgent = httpServletRequest.getHeader("User-Agent");
+
+        TemplateCreationResult result = templateService.createTemplate(
+                principal.getId(),
+                templateCreateRequest,
+                clientIp,
+                userAgent
+        );
+
+        return switch (result) {
+            case TemplateCreationResult.Complete complete ->
+                    ResponseEntity.status(HttpStatus.OK)
+                            .body(ApiResult.ok(complete.template()));
+
+            case TemplateCreationResult.Incomplete incomplete ->
+                    ResponseEntity.status(HttpStatus.ACCEPTED)
+                            .body(ApiResult.ok(incomplete.partialTemplate()));
+        };
     }
 
     @Operation(

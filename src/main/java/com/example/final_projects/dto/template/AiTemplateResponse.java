@@ -3,8 +3,11 @@ package com.example.final_projects.dto.template;
 import com.example.final_projects.entity.TemplateStatus;
 import com.example.final_projects.entity.TemplateType;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public record AiTemplateResponse(
         Long id,
@@ -21,15 +24,17 @@ public record AiTemplateResponse(
         List<ButtonDto> buttons,
         List<VariableDto> variables,
         List<IndustryDto> industries,
-        List<PurposeDto> purposes
+        List<PurposeDto> purposes,
+        @JsonProperty("_mapped_variables") Map<String, String> mappedVariables
 ) {
     public record ButtonDto(
-            Long id,
             String name,
-            int ordering,
+            String linkMo,
             String linkPc,
             String linkAnd,
-            String linkIos
+            String linkIos,
+            String linkType,
+            int ordering
     ) {}
 
     public record VariableDto(
