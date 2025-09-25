@@ -46,7 +46,7 @@ jobs:
             export OTP_PEPPER="${{ secrets.OTP_PEPPER }}"
             export REFRESH_PEPPER="${{ secrets.REFRESH_PEPPER }}"
             export VERIFY_BASE_URL="${{ secrets.VERIFY_BASE_URL }}"
-            export VERIFY_BASE_URL="${{ secrets.AI_BASE_URL }}"
+            export AI_BASE_URL="${{ secrets.AI_BASE_URL }}"
             
             /home/ubuntu/scripts/stop.sh
             sleep 3
