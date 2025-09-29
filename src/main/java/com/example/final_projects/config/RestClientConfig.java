@@ -3,7 +3,6 @@ package com.example.final_projects.config;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.util.Timeout;
-import org.apache.hc.client5.http.config.RequestConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,22 +20,16 @@ public class RestClientConfig {
 
     @Bean
     public RestClient restClient() {
-        RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectionRequestTimeout(Timeout.ofSeconds(5))
-                .setResponseTimeout(Timeout.ofSeconds(10))
-                .build();
-
         CloseableHttpClient httpClient = HttpClients.custom()
-                .setDefaultRequestConfig(requestConfig)
                 .evictExpiredConnections()
                 .evictIdleConnections(Timeout.ofSeconds(30))
                 .build();
 
         HttpComponentsClientHttpRequestFactory factory =
                 new HttpComponentsClientHttpRequestFactory(httpClient);
-        factory.setConnectTimeout((int) Duration.ofSeconds(5).toMillis());
-        factory.setConnectionRequestTimeout((int) Duration.ofSeconds(5).toMillis());
-        factory.setReadTimeout((int) Duration.ofSeconds(10).toMillis());
+
+        factory.setConnectTimeout(Duration.ofSeconds(5));
+        factory.setReadTimeout(Duration.ofSeconds(20));
 
         return RestClient.builder()
                 .baseUrl(baseUrl)

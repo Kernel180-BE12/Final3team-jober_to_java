@@ -100,3 +100,17 @@ resilience4j:
         waitDurationInOpenState: 10s
         permittedNumberOfCallsInHalfOpenState: 3
         automaticTransitionFromOpenToHalfOpenEnabled: true
+
+app:
+  security:
+    cors:
+      allowed-origins:
+        - "http://localhost:3030"
+        - "https://배포주소"
+    cookie:
+      same-site: NONE
+      domain: ""
+      max-age-seconds: 1209600
+      path: /api/auth/token
+    csrf:
+      enabled: true

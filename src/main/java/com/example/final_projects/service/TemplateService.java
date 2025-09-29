@@ -3,11 +3,15 @@ package com.example.final_projects.service;
 import com.example.final_projects.dto.PageResponse;
 import com.example.final_projects.dto.template.*;
 import com.example.final_projects.entity.*;
+import com.example.final_projects.exception.AiException;
 import com.example.final_projects.exception.TemplateException;
+import com.example.final_projects.exception.code.AiErrorCode;
 import com.example.final_projects.exception.code.TemplateErrorCode;
 import com.example.final_projects.repository.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,38 +20,33 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-@Transactional(readOnly = true)
+@Transactional
 public class TemplateService {
 
     private final TemplateRepository templateRepository;
     private final TemplateHistoryRepository templateHistoryRepository;
     private final AiRestClient aiRestClient;
-    private final TemplateButtonRepository templateButtonRepository;
-    private final TemplateVariableRepository templateVariableRepository;
-    private final UserTemplateRequestRepository userTemplateRequestRepository;
-    private final IndustryRepository industryRepository;
-    private final PurposeRepository purposeRepository;
+    private final FailureLogService failureLogService;
+    private final UserTemplateRequestService userTemplateRequestService;
+    private final TemplateFactory templateFactory;
 
     public TemplateService(
             TemplateRepository templateRepository,
             TemplateHistoryRepository templateHistoryRepository,
             AiRestClient aiRestClient,
-            TemplateButtonRepository templateButtonRepository,
-            TemplateVariableRepository templateVariableRepository,
-            UserTemplateRequestRepository userTemplateRequestRepository,
-            IndustryRepository industryRepository,
-            PurposeRepository purposeRepository
+            FailureLogService failureLogService,
+            UserTemplateRequestService userTemplateRequestService,
+            TemplateFactory templateFactory
     ) {
         this.templateRepository = templateRepository;
         this.templateHistoryRepository = templateHistoryRepository;
         this.aiRestClient = aiRestClient;
-        this.templateButtonRepository = templateButtonRepository;
-        this.templateVariableRepository = templateVariableRepository;
-        this.userTemplateRequestRepository = userTemplateRequestRepository;
-        this.industryRepository = industryRepository;
-        this.purposeRepository = purposeRepository;
+        this.failureLogService = failureLogService;
+        this.userTemplateRequestService = userTemplateRequestService;
+        this.templateFactory = templateFactory;
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<TemplateResponse> getTemplates(Long userId, TemplateStatus status, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page - 1, size);
 
@@ -60,6 +59,7 @@ public class TemplateService {
         return new PageResponse<>(data, page, size, templatePage.getTotalElements());
     }
 
+    @Transactional(readOnly = true)
     public TemplateResponse getTemplateById(Long templateId, Long userId) {
         Template template = templateRepository.findById(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않습니다"));
@@ -70,109 +70,33 @@ public class TemplateService {
         return TemplateResponse.from(template);
     }
 
-    @Transactional
-    public TemplateResponse createTemplate(Long userId, TemplateCreateRequest request) {
-        UserTemplateRequest userRequest = createUserTemplateRequest(userId, request);
+    public TemplateCreationResult createTemplate(Long userId, TemplateCreateRequest request, String clientIp, String userAgent) {
+        UserTemplateRequest userRequest = userTemplateRequestService.createInitialRequest(userId, request.getRequestContent());
 
-        try {
-            AiTemplateResponse aiResponse = aiRestClient.createTemplate(userRequest);
+        ResponseEntity<AiApiResponse<AiTemplateResponse>> responseEntity = aiRestClient.createTemplate(userRequest);
 
-            Template template = createAndSaveTemplate(userId, aiResponse, userRequest);
+        AiApiResponse<AiTemplateResponse> aiResponseWrapper = responseEntity.getBody();
 
-            saveTemplateHistory(template);
-
-            markRequestCompleted(userRequest);
-
-            return TemplateResponse.from(template);
-
-        } catch (Exception e) {
-            markRequestFailed(userRequest, e);
-            throw e;
+        if (aiResponseWrapper == null || aiResponseWrapper.data() == null) {
+            userTemplateRequestService.markAsFailed(userRequest.getId());
+            failureLogService.saveFailureLog(userRequest.getId(), "EMPTY_RESPONSE", "AI response body is null.", 1, userAgent, clientIp, responseEntity.getStatusCode().value(), 0L);
+            throw new AiException(AiErrorCode.AI_REQUEST_FAILED, "AI response body is null.");
         }
-    }
 
-    private UserTemplateRequest createUserTemplateRequest(Long userId, TemplateCreateRequest request) {
-        UserTemplateRequest userRequest = UserTemplateRequest.builder()
-                .userId(userId)
-                .requestContent(request.getRequestContent())
-                .status(UserTemplateRequestStatus.PENDING)
-                .build();
-        return userTemplateRequestRepository.save(userRequest);
-    }
+        AiTemplateResponse aiTemplateData = aiResponseWrapper.data();
 
-    private Template createAndSaveTemplate(Long userId, AiTemplateResponse aiResponse, UserTemplateRequest userRequest) {
-        Template template = Template.builder()
-                .userId(userId)
-                .categoryId(aiResponse.categoryId())
-                .title(aiResponse.title())
-                .content(aiResponse.content())
-                .imageUrl(aiResponse.imageUrl())
-                .type(TemplateType.valueOf(aiResponse.type()))
-                .isPublic(aiResponse.isPublic())
-                .status(TemplateStatus.CREATED)
-                .userTemplateRequest(userRequest)
-                .build();
-
-        templateRepository.save(template);
-
-        saveTemplateButtons(template, aiResponse);
-        saveTemplateVariables(template, aiResponse);
-        saveTemplateIndustries(template, aiResponse);
-        saveTemplatePurposes(template, aiResponse);
-
-        return templateRepository.save(template);
-    }
-
-    private void saveTemplateButtons(Template template, AiTemplateResponse aiResponse) {
-        if (aiResponse.buttons() == null) return;
-
-        aiResponse.buttons().forEach(b -> templateButtonRepository.save(
-                TemplateButton.builder()
-                        .template(template)
-                        .name(b.name())
-                        .ordering(b.ordering())
-                        .linkPc(b.linkPc())
-                        .linkAnd(b.linkAnd())
-                        .linkIos(b.linkIos())
-                        .createdAt(LocalDateTime.now())
-                        .build()
-        ));
-    }
-
-    private void saveTemplateVariables(Template template, AiTemplateResponse aiResponse) {
-        if (aiResponse.variables() == null) return;
-
-        aiResponse.variables().forEach(v -> {
-            TemplateVariable variable = TemplateVariable.builder()
-                    .template(template)
-                    .variableKey(v.variableKey())
-                    .placeholder(v.placeholder())
-                    .inputType(v.inputType())
-                    .createdAt(LocalDateTime.now())
-                    .build();
-            templateVariableRepository.save(variable);
-            template.getVariables().add(variable);
-        });
-    }
-
-    private void saveTemplateIndustries(Template template, AiTemplateResponse aiResponse) {
-        if (aiResponse.industries() == null) return;
-
-        aiResponse.industries().forEach(i -> {
-            Industry industry = industryRepository.findById(i.id())
-                    .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + i.id()));
-            template.getIndustries().add(industry);
-        });
-    }
-
-    private void saveTemplatePurposes(Template template, AiTemplateResponse aiResponse) {
-        if (aiResponse.purposes() == null) return;
-
-        aiResponse.purposes().forEach(p -> {
-            Purpose purpose = purposeRepository.findById(p.id())
-                    .orElseThrow(() -> new IllegalArgumentException("Purpose not found: " + p.id()));
-            template.getPurposes().add(purpose);
-        });
+        if (responseEntity.getStatusCode() == HttpStatus.OK) {
+            Template template = templateFactory.createFrom(userId, aiTemplateData, userRequest);
+            saveTemplateHistory(template);
+            userTemplateRequestService.markAsCompleted(userRequest.getId());
+            return new TemplateCreationResult.Complete(TemplateResponse.from(template));
+        }
+        else if (responseEntity.getStatusCode() == HttpStatus.ACCEPTED) {
+            return new TemplateCreationResult.Incomplete(aiTemplateData);
+        }
+        else {
+            throw new IllegalStateException("Unexpected success status code: " + responseEntity.getStatusCode());
+        }
     }
 
     private void saveTemplateHistory(Template template) {
@@ -183,16 +107,6 @@ public class TemplateService {
                         .createdAt(LocalDateTime.now())
                         .build()
         );
-    }
-
-    private void markRequestCompleted(UserTemplateRequest userRequest) {
-        userRequest.setStatus(UserTemplateRequestStatus.COMPLETED);
-        userTemplateRequestRepository.save(userRequest);
-    }
-
-    private void markRequestFailed(UserTemplateRequest userRequest, Exception e) {
-        userRequest.setStatus(UserTemplateRequestStatus.FAILED);
-        userTemplateRequestRepository.save(userRequest);
     }
 
     @Transactional

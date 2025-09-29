@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -86,4 +87,19 @@ public class TokenServiceImpl {
         long rtExpMs = refreshValidityMs;
         return new RefreshResponse(accessToken, newRefreshToken, atExpMs, rtExpMs);
     }
+    public void deleteRefreshToken(String refreshTokenRaw) {
+        if (refreshTokenRaw == null || refreshTokenRaw.isBlank()) {
+            return;
+        }
+        String hash = TokenHashUtil.sha256HexWithPepper(pepper, refreshTokenRaw);
+        Optional<RefreshToken> rtOpt = refreshTokenRepository.findByTokenHash(hash);
+        rtOpt.ifPresent(rt -> {
+            refreshTokenRepository.revokedById(rt.getId());
+        });
+    }
+
+    public int logoutAllDevices(Long userId) {
+        return refreshTokenRepository.revokedAllByUserId(userId, LocalDateTime.now());
+    }
+
 }
