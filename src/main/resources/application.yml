@@ -104,13 +104,12 @@ resilience4j:
 app:
   security:
     cors:
-      allowed-origins:
-        - "http://localhost:3030"
-        - "https://배포주소"
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3030}
     cookie:
-      same-site: NONE
-      domain: ""
-      max-age-seconds: 1209600
-      path: /api/auth/token
+      same-site: ${APP_COOKIE_SAMESITE:Lax}     # Lax / None / Strict
+      secure: ${APP_COOKIE_SECURE:false}        # 운영 HTTPS이면 true
+      domain: ${APP_COOKIE_DOMAIN:}
+      max-age-seconds: ${APP_COOKIE_MAX_AGE:1209600}
+      path: ${APP_COOKIE_PATH:/api/auth}        
     csrf:
-      enabled: true
+      enabled: ${CSRF_ENABLED:true}
