@@ -61,12 +61,36 @@ jobs:
                 host: ${{ secrets.EC2_HOST }}
                 username: ubuntu
                 key: ${{ secrets.EC2_SSH_KEY }}
-                envs: DB_URL,DB_USER,DB_PASS,JWT_SECRET,REFRESH_PEPPER,OTP_PEPPER,VERIFY_BASE_URL,AI_BASE_URL,CORS_ALLOWED_ORIGINS,APP_COOKIE_SAMESITE,APP_COOKIE_SECURE,APP_COOKIE_MAX_AGE,APP_COOKIE_PATH,CSRF_ENABLED,JAVA_TOOL_OPTIONS
+
+                # 👇 원격으로 넘길 키
+                envs: DB_URL,DB_USER,DB_PASS,JWT_SECRET,REFRESH_PEPPER,OTP_PEPPER,VERIFY_BASE_URL,AI_BASE_URL,CORS_ALLOWED_ORIGINS,APP_COOKIE_SAMESITE,APP_COOKIE_SECURE,APP_COOKIE_MAX_AGE,APP_COOKIE_PATH,CSRF_ENABLED,JAVA_TOOL_OPTIONS,SERVER_PORT
+
                 script: |
                   set -euo pipefail
                   [ -n "${JWT_SECRET:-}" ] || { echo "JWT_SECRET missing"; exit 1; }
                   [ -n "${REFRESH_PEPPER:-}" ] || { echo "REFRESH_PEPPER missing"; exit 1; }
-                  /home/ubuntu/scripts/start.sh
+                  [ -n "${DB_URL:-}" ] || { echo "DB_URL missing"; exit 1; }
+                  [ -n "${DB_USER:-}" ] || { echo "DB_USER missing"; exit 1; }
+                  [ -n "${DB_PASS:-}" ] || { echo "DB_PASS missing"; exit 1; }
+
+                  # 스크립트 준비
+                  sed -i 's/\r$//' /home/ubuntu/scripts/*.sh || true
+                  chmod +x /home/ubuntu/scripts/*.sh
+
+                  # JAVA_TOOL_OPTIONS에 시스템 프로퍼티 확실히 추가
+                  export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Djwt.secret=${JWT_SECRET} -Dsecurity.refresh.pepper=${REFRESH_PEPPER}"
+
+                  # DB 관련 환경변수도 확실히 export (sudo로 실행해도 보존 가능하게)
+                  export DB_URL DB_USER DB_PASS OTP_PEPPER VERIFY_BASE_URL AI_BASE_URL CORS_ALLOWED_ORIGINS APP_COOKIE_SAMESITE APP_COOKIE_SECURE APP_COOKIE_MAX_AGE APP_COOKIE_PATH CSRF_ENABLED
+
+                  # start.sh 내부에 sudo가 있다면 환경 보존 옵션 필수
+                  if grep -q 'sudo' /home/ubuntu/scripts/start.sh; then
+                    sudo --preserve-env=DB_URL,DB_USER,DB_PASS,JWT_SECRET,REFRESH_PEPPER,OTP_PEPPER,VERIFY_BASE_URL,AI_BASE_URL,CORS_ALLOWED_ORIGINS,APP_COOKIE_SAMESITE,APP_COOKIE_SECURE,APP_COOKIE_MAX_AGE,APP_COOKIE_PATH,CSRF_ENABLED,JAVA_TOOL_OPTIONS \
+                      /home/ubuntu/scripts/start.sh
+                  else
+                    /home/ubuntu/scripts/start.sh
+                  fi
+
               env:
                 DB_URL: ${{ secrets.DB_URL }}
                 DB_USER: ${{ secrets.DB_USER }}
@@ -82,7 +106,8 @@ jobs:
                 APP_COOKIE_MAX_AGE: ${{ secrets.APP_COOKIE_MAX_AGE }}
                 APP_COOKIE_PATH: ${{ secrets.APP_COOKIE_PATH }}
                 CSRF_ENABLED: ${{ secrets.CSRF_ENABLED }}
-                JAVA_TOOL_OPTIONS: "-Djwt.secret=${{ secrets.JWT_SECRET }} -Dsecurity.refresh.pepper=${{ secrets.REFRESH_PEPPER }}"
+                SERVER_PORT: 8080
+                JAVA_TOOL_OPTIONS: "-Dspring.application.name=jober-app"
 
 
 
