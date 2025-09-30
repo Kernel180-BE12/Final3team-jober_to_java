@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 
 public class SignupRequest {
         @Email @NotBlank private String email;
-        @NotBlank @Size(min=8,max=64) private String password;
+        @NotBlank(message = "비밀번호는 필수입니다.") @Size(min=8,max=64, message = "비밀번호는 8자 이상이어야 합니다.") private String password;
         @NotBlank @Size(min=1,max=30) private String name; // or name
         @NotBlank private String emailVerificationToken;
 
