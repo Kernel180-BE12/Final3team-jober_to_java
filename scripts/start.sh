@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === JWT 필수 환경 ===
+# === 필수 환경변수 확인 ===
 : "${JWT_SECRET:?JWT_SECRET missing}"
 : "${REFRESH_PEPPER:?REFRESH_PEPPER missing}"
+: "${DB_URL:?DB_URL missing}"
+: "${DB_USER:?DB_USER missing}"
+: "${DB_PASS:?DB_PASS missing}"
+
+# === Spring Boot DB 정보 주입 ===
+export SPRING_APPLICATION_JSON="$(cat <<JSON
+{
+  "spring": {
+    "datasource": {
+      "url": "${DB_URL}",
+      "username": "${DB_USER}",
+      "password": "${DB_PASS}"
+    }
+  }
+}
+JSON
+)"
+
+# === JWT 설정 ===
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Djwt.secret=${JWT_SECRET} -Dsecurity.refresh.pepper=${REFRESH_PEPPER}"
 
 APP_NAME="jober-app"
