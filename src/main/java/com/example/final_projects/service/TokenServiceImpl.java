@@ -14,11 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
 @Transactional
-public class TokenServiceImpl implements TokenService {
+public class TokenServiceImpl {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtTokenProvider jwtTokenProvider;
@@ -35,7 +36,6 @@ public class TokenServiceImpl implements TokenService {
         this.refreshValidityMs = refreshValidityMs;
     }
 
-    @Override
     public RefreshResponse refresh(String refreshTokenRaw) {
         // 1) 제출된 RT 해시화 → 조회
         String hash = TokenHashUtil.sha256HexWithPepper(pepper, refreshTokenRaw);
@@ -87,4 +87,19 @@ public class TokenServiceImpl implements TokenService {
         long rtExpMs = refreshValidityMs;
         return new RefreshResponse(accessToken, newRefreshToken, atExpMs, rtExpMs);
     }
+    public void deleteRefreshToken(String refreshTokenRaw) {
+        if (refreshTokenRaw == null || refreshTokenRaw.isBlank()) {
+            return;
+        }
+        String hash = TokenHashUtil.sha256HexWithPepper(pepper, refreshTokenRaw);
+        Optional<RefreshToken> rtOpt = refreshTokenRepository.findByTokenHash(hash);
+        rtOpt.ifPresent(rt -> {
+            refreshTokenRepository.revokedById(rt.getId());
+        });
+    }
+
+    public int logoutAllDevices(Long userId) {
+        return refreshTokenRepository.revokedAllByUserId(userId, LocalDateTime.now());
+    }
+
 }

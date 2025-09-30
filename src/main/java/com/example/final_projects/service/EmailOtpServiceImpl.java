@@ -23,7 +23,7 @@ import java.util.UUID;
 
 @Service
 @Transactional
-public class EmailOtpServiceImpl implements EmailOtpService{
+public class EmailOtpServiceImpl implements EmailOtpService {
 
     private final EmailOtpRepository otpRepo;
     private final VerifyEmailTokenRepository tokenRepo;
