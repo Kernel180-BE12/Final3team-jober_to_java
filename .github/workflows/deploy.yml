@@ -30,7 +30,7 @@ jobs:
                   source: "target/*.jar,scripts/*"
                   target: "/home/ubuntu/"
 
-            # CRLF → LF, 실행권한, JAR 존재 체크 (준비 단계)
+            # 준비(줄바꿈/권한/JAR 확인) — 안전
             - name: Prepare scripts on EC2
               uses: appleboy/ssh-action@v0.1.6
               with:
@@ -43,7 +43,7 @@ jobs:
                       chmod +x /home/ubuntu/scripts/*.sh
                       ls -al /home/ubuntu/target/*.jar
 
-            # stop.sh만 별도 실행 (세션 끊겨도 파이프라인은 진행)
+            # stop — 세션 끊겨도 통과
             - name: Stop application on EC2 (allow disconnect)
               uses: appleboy/ssh-action@v0.1.6
               continue-on-error: true
@@ -54,36 +54,41 @@ jobs:
                   script: |
                       /home/ubuntu/scripts/stop.sh || true
 
-            # start.sh 실행 + 환경변수 주입 + 헬스 확인
+            # start — 이 스텝에는 오직 start.sh만! (jober-app 들어간 명령 금지)
             - name: Start application on EC2
+              uses: appleboy/ssh-action@v0.1.6
+              env:
+                  DB_URL: ${{ secrets.DB_URL }}
+                  DB_USER: ${{ secrets.DB_USER }}
+                  DB_PASS: ${{ secrets.DB_PASS }}
+                  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+                  OTP_PEPPER: ${{ secrets.OTP_PEPPER }}
+                  REFRESH_PEPPER: ${{ secrets.REFRESH_PEPPER }}
+                  VERIFY_BASE_URL: ${{ secrets.VERIFY_BASE_URL }}
+                  AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+                  CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+                  APP_COOKIE_SAMESITE: ${{ secrets.APP_COOKIE_SAMESITE }}
+                  APP_COOKIE_SECURE: ${{ secrets.APP_COOKIE_SECURE }}
+                  APP_COOKIE_MAX_AGE: ${{ secrets.APP_COOKIE_MAX_AGE }}
+                  APP_COOKIE_PATH: ${{ secrets.APP_COOKIE_PATH }}
+                  CSRF_ENABLED: ${{ secrets.CSRF_ENABLED }}
+              with:
+                  host: ${{ secrets.EC2_HOST }}
+                  username: ubuntu
+                  key: ${{ secrets.EC2_SSH_KEY }}
+                  envs: DB_URL,DB_USER,DB_PASS,JWT_SECRET,OTP_PEPPER,REFRESH_PEPPER,VERIFY_BASE_URL,AI_BASE_URL,CORS_ALLOWED_ORIGINS,APP_COOKIE_SAMESITE,APP_COOKIE_SECURE,APP_COOKIE_MAX_AGE,APP_COOKIE_PATH,CSRF_ENABLED
+                  script: |
+                      set -euo pipefail
+                      /home/ubuntu/scripts/start.sh
+
+            # health — 이제 별도 세션이므로 'jober-app' 문자열 써도 안전
+            - name: Health check on EC2
               uses: appleboy/ssh-action@v0.1.6
               with:
                   host: ${{ secrets.EC2_HOST }}
                   username: ubuntu
                   key: ${{ secrets.EC2_SSH_KEY }}
                   script: |
-                      set -euo pipefail
-                      
-                      # ===== 환경변수 세팅 (Actions Secrets → 프로세스 환경) =====
-                      export DB_URL='${{ secrets.DB_URL }}'
-                      export DB_USER='${{ secrets.DB_USER }}'
-                      export DB_PASS='${{ secrets.DB_PASS }}'
-                      export JWT_SECRET='${{ secrets.JWT_SECRET }}'
-                      export OTP_PEPPER='${{ secrets.OTP_PEPPER }}'
-                      export REFRESH_PEPPER='${{ secrets.REFRESH_PEPPER }}'
-                      export VERIFY_BASE_URL='${{ secrets.VERIFY_BASE_URL }}'
-                      export AI_BASE_URL='${{ secrets.AI_BASE_URL }}'
-                      
-                      export CORS_ALLOWED_ORIGINS='${{ secrets.CORS_ALLOWED_ORIGINS }}'
-                      export APP_COOKIE_SAMESITE='${{ secrets.APP_COOKIE_SAMESITE }}'
-                      export APP_COOKIE_SECURE='${{ secrets.APP_COOKIE_SECURE }}'
-                      export APP_COOKIE_MAX_AGE='${{ secrets.APP_COOKIE_MAX_AGE }}'
-                      export APP_COOKIE_PATH='${{ secrets.APP_COOKIE_PATH }}'
-                      export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
-                      
-                      /home/ubuntu/scripts/start.sh
-                      
-                      # 간단 헬스 체크
                       sleep 2
                       ss -ltnp | grep :8080 || true
                       tail -n 150 /home/ubuntu/jober-app.log || true
