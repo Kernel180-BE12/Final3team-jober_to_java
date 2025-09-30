@@ -55,57 +55,34 @@ jobs:
                       /home/ubuntu/scripts/stop.sh || true
 
             # start — 이 스텝에는 오직 start.sh만! (jober-app 들어간 명령 금지)
-            - name: Start application on EC2
-              uses: appleboy/ssh-action@v0.1.6
-              # 선택: Start 스텝만 실패 무시 (헬스 스텝이 최종 판정)
-              continue-on-error: true
+            - name: Restart application on EC2
+              uses: appleboy/ssh-action@v1.0.0
               with:
                 host: ${{ secrets.EC2_HOST }}
                 username: ubuntu
                 key: ${{ secrets.EC2_SSH_KEY }}
-                envs: DB_URL,DB_USER,DB_PASS,JWT_SECRET,REFRESH_PEPPER,OTP_PEPPER,VERIFY_BASE_URL,AI_BASE_URL,CORS_ALLOWED_ORIGINS,APP_COOKIE_SAMESITE,APP_COOKIE_SECURE,APP_COOKIE_MAX_AGE,APP_COOKIE_PATH,CSRF_ENABLED,JAVA_TOOL_OPTIONS,SERVER_PORT
                 script: |
-                  set -euo pipefail
-                  [ -n "${JWT_SECRET:-}" ] || { echo "JWT_SECRET missing"; exit 1; }
-                  [ -n "${REFRESH_PEPPER:-}" ] || { echo "REFRESH_PEPPER missing"; exit 1; }
-                  [ -n "${DB_URL:-}" ] || { echo "DB_URL missing"; exit 1; }
-                  [ -n "${DB_USER:-}" ] || { echo "DB_USER missing"; exit 1; }
-                  [ -n "${DB_PASS:-}" ] || { echo "DB_PASS missing"; exit 1; }
-
-                  sed -i 's/\r$//' /home/ubuntu/scripts/*.sh || true
+                  # === 환경 변수 주입 ===
+                  export JWT_SECRET='${{ secrets.JWT_SECRET }}'
+                  export REFRESH_PEPPER='${{ secrets.REFRESH_PEPPER }}'
+                  export DB_URL='${{ secrets.DB_URL }}'
+                  export DB_USER='${{ secrets.DB_USER }}'
+                  export DB_PASS='${{ secrets.DB_PASS }}'
+                  export OTP_PEPPER='${{ secrets.OTP_PEPPER }}'
+                  export VERIFY_BASE_URL='${{ secrets.VERIFY_BASE_URL }}'
+                  export AI_BASE_URL='${{ secrets.AI_BASE_URL }}'
+                  export CORS_ALLOWED_ORIGINS='${{ secrets.CORS_ALLOWED_ORIGINS }}'
+                  export APP_COOKIE_SAMESITE='${{ secrets.APP_COOKIE_SAMESITE }}'
+                  export APP_COOKIE_SECURE='${{ secrets.APP_COOKIE_SECURE }}'
+                  export APP_COOKIE_MAX_AGE='${{ secrets.APP_COOKIE_MAX_AGE }}'
+                  export APP_COOKIE_PATH='${{ secrets.APP_COOKIE_PATH }}'
+                  export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
+                  export SERVER_PORT='8080'
+                    
+                  # === 스크립트 실행 ===
                   chmod +x /home/ubuntu/scripts/*.sh
-
-                  # 확실히 환경 보존
-                  export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Djwt.secret=${JWT_SECRET} -Dsecurity.refresh.pepper=${REFRESH_PEPPER}"
-                  export DB_URL DB_USER DB_PASS OTP_PEPPER VERIFY_BASE_URL AI_BASE_URL CORS_ALLOWED_ORIGINS APP_COOKIE_SAMESITE APP_COOKIE_SECURE APP_COOKIE_MAX_AGE APP_COOKIE_PATH CSRF_ENABLED
-
-                  # start.sh 내부에 sudo가 있으면 env 보존해서 실행
-                  if grep -q 'sudo' /home/ubuntu/scripts/start.sh; then
-                    sudo --preserve-env=DB_URL,DB_USER,DB_PASS,JWT_SECRET,REFRESH_PEPPER,OTP_PEPPER,VERIFY_BASE_URL,AI_BASE_URL,CORS_ALLOWED_ORIGINS,APP_COOKIE_SAMESITE,APP_COOKIE_SECURE,APP_COOKIE_MAX_AGE,APP_COOKIE_PATH,CSRF_ENABLED,JAVA_TOOL_OPTIONS \
-                      /home/ubuntu/scripts/start.sh || true
-                  else
-                    /home/ubuntu/scripts/start.sh || true
-                  fi
-
-                  # 어떤 이유로 비정상 종료(137 등)여도 이 스텝은 성공 처리
-                  exit 0
-              env:
-                DB_URL: ${{ secrets.DB_URL }}
-                DB_USER: ${{ secrets.DB_USER }}
-                DB_PASS: ${{ secrets.DB_PASS }}
-                JWT_SECRET: ${{ secrets.JWT_SECRET }}
-                REFRESH_PEPPER: ${{ secrets.REFRESH_PEPPER }}
-                OTP_PEPPER: ${{ secrets.OTP_PEPPER }}
-                VERIFY_BASE_URL: ${{ secrets.VERIFY_BASE_URL }}
-                AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
-                CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
-                APP_COOKIE_SAMESITE: ${{ secrets.APP_COOKIE_SAMESITE }}
-                APP_COOKIE_SECURE: ${{ secrets.APP_COOKIE_SECURE }}
-                APP_COOKIE_MAX_AGE: ${{ secrets.APP_COOKIE_MAX_AGE }}
-                APP_COOKIE_PATH: ${{ secrets.APP_COOKIE_PATH }}
-                CSRF_ENABLED: ${{ secrets.CSRF_ENABLED }}
-                SERVER_PORT: 8080
-                JAVA_TOOL_OPTIONS: "-Dspring.application.name=jober-app"
+                  /home/ubuntu/scripts/stop.sh || true
+                  /home/ubuntu/scripts/start.sh
 
 
 
