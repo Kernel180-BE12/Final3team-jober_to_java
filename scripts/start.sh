@@ -6,25 +6,6 @@ set -euo pipefail
 : "${REFRESH_PEPPER:?REFRESH_PEPPER missing}"
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Djwt.secret=${JWT_SECRET} -Dsecurity.refresh.pepper=${REFRESH_PEPPER}"
 
-# === DB 필수 환경 ===
-: "${DB_URL:?DB_URL missing}"
-: "${DB_USER:?DB_USER missing}"
-: "${DB_PASS:?DB_PASS missing}"
-
-# Spring이 DB 환경을 100% 읽도록 보강
-export SPRING_APPLICATION_JSON="$(cat <<JSON
-{
-  "spring": {
-    "datasource": {
-      "url": "${DB_URL}",
-      "username": "${DB_USER}",
-      "password": "${DB_PASS}"
-    }
-  }
-}
-JSON
-)"
-
 APP_NAME="jober-app"
 JAR="$(ls -t /home/ubuntu/target/*.jar 2>/dev/null | head -1)"
 LOG="/home/ubuntu/${APP_NAME}.log"
