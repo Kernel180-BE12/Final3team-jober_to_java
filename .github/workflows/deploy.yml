@@ -30,20 +30,39 @@ jobs:
                   source: "target/*.jar,scripts/*"
                   target: "/home/ubuntu/"
 
-            - name: Restart application on EC2
+            # CRLF → LF, 실행권한, JAR 존재 체크 (준비 단계)
+            - name: Prepare scripts on EC2
               uses: appleboy/ssh-action@v0.1.6
               with:
                   host: ${{ secrets.EC2_HOST }}
                   username: ubuntu
                   key: ${{ secrets.EC2_SSH_KEY }}
-                  script_stop: true
+                  script: |
+                      set -e
+                      sed -i 's/\r$//' /home/ubuntu/scripts/*.sh || true
+                      chmod +x /home/ubuntu/scripts/*.sh
+                      ls -al /home/ubuntu/target/*.jar
+
+            # stop.sh만 별도 실행 (세션 끊겨도 파이프라인은 진행)
+            - name: Stop application on EC2 (allow disconnect)
+              uses: appleboy/ssh-action@v0.1.6
+              continue-on-error: true
+              with:
+                  host: ${{ secrets.EC2_HOST }}
+                  username: ubuntu
+                  key: ${{ secrets.EC2_SSH_KEY }}
+                  script: |
+                      /home/ubuntu/scripts/stop.sh || true
+
+            # start.sh 실행 + 환경변수 주입 + 헬스 확인
+            - name: Start application on EC2
+              uses: appleboy/ssh-action@v0.1.6
+              with:
+                  host: ${{ secrets.EC2_HOST }}
+                  username: ubuntu
+                  key: ${{ secrets.EC2_SSH_KEY }}
                   script: |
                       set -euo pipefail
-                      
-                      # 윈도우 줄바꿈 대응(CRLF -> LF)
-                      sed -i 's/\r$//' /home/ubuntu/scripts/*.sh
-                      
-                      chmod +x /home/ubuntu/scripts/*.sh
                       
                       # ===== 환경변수 세팅 (Actions Secrets → 프로세스 환경) =====
                       export DB_URL='${{ secrets.DB_URL }}'
@@ -62,12 +81,9 @@ jobs:
                       export APP_COOKIE_PATH='${{ secrets.APP_COOKIE_PATH }}'
                       export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
                       
-                      # ===== 앱 재시작 =====
-                      /home/ubuntu/scripts/stop.sh || true
-                      sleep 3
                       /home/ubuntu/scripts/start.sh
                       
-                      # (선택) 간단 확인
+                      # 간단 헬스 체크
                       sleep 2
                       ss -ltnp | grep :8080 || true
-                      tail -n 120 /home/ubuntu/jober-app.log || true
+                      tail -n 150 /home/ubuntu/jober-app.log || true
