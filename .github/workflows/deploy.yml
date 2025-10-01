@@ -8,6 +8,9 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      SERVER_PORT: ${{ vars.SERVER_PORT || '8080' }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -18,8 +21,23 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: Build with Maven
-        run: mvn clean package -DskipTests
+        run: mvn clean package
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
 
       - name: Upload JAR to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -30,9 +48,8 @@ jobs:
           source: "target/*.jar,scripts/*"
           target: "/home/ubuntu/"
 
-      # 준비(줄바꿈/권한/JAR 확인) — 안전
       - name: Prepare scripts on EC2
-        uses: appleboy/ssh-action@v0.1.6
+        uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
@@ -43,9 +60,8 @@ jobs:
             chmod +x /home/ubuntu/scripts/*.sh
             ls -al /home/ubuntu/target/*.jar
 
-      # stop — 세션 끊겨도 통과
       - name: Stop application on EC2 (allow disconnect)
-        uses: appleboy/ssh-action@v0.1.6
+        uses: appleboy/ssh-action@v1.0.0
         continue-on-error: true
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -54,39 +70,33 @@ jobs:
           script: |
             /home/ubuntu/scripts/stop.sh || true
 
-      # start — 이 스텝에는 오직 start.sh만! (jober-app 들어간 명령 금지)
-      - name: Restart application on EC2
+      - name: Start application on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # === 환경 변수 주입 ===
             export JWT_SECRET='${{ secrets.JWT_SECRET }}'
             export REFRESH_PEPPER='${{ secrets.REFRESH_PEPPER }}'
             export DB_URL='${{ secrets.DB_URL }}'
             export DB_USER='${{ secrets.DB_USER }}'
             export DB_PASS='${{ secrets.DB_PASS }}'
             export OTP_PEPPER='${{ secrets.OTP_PEPPER }}'
-            export VERIFY_BASE_URL='${{ secrets.VERIFY_BASE_URL }}'
-            export AI_BASE_URL='${{ secrets.AI_BASE_URL }}'
-            export CORS_ALLOWED_ORIGINS='${{ secrets.CORS_ALLOWED_ORIGINS }}'
-            export APP_COOKIE_SAMESITE='${{ secrets.APP_COOKIE_SAMESITE }}'
-            export APP_COOKIE_SECURE='${{ secrets.APP_COOKIE_SECURE }}'
-            export APP_COOKIE_MAX_AGE='${{ secrets.APP_COOKIE_MAX_AGE }}'
-            export APP_COOKIE_PATH='${{ secrets.APP_COOKIE_PATH }}'
-            export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
-            export SERVER_PORT='8080'
+            export VERIFY_BASE_URL='${{ vars.VERIFY_BASE_URL }}'
+            export AI_BASE_URL='${{ vars.AI_BASE_URL }}'
+            export CORS_ALLOWED_ORIGINS='${{ vars.CORS_ALLOWED_ORIGINS }}'
+            export APP_COOKIE_SAMESITE='${{ vars.APP_COOKIE_SAMESITE }}'
+            export APP_COOKIE_SECURE='${{ vars.APP_COOKIE_SECURE }}'
+            export APP_COOKIE_MAX_AGE='${{ vars.APP_COOKIE_MAX_AGE }}'
+            export APP_COOKIE_PATH='${{ vars.APP_COOKIE_PATH }}'
+            export CSRF_ENABLED='${{ vars.CSRF_ENABLED }}'
+            export SERVER_PORT='${{ env.SERVER_PORT }}'
             
-            # === 스크립트 실행 ===
-            chmod +x /home/ubuntu/scripts/*.sh
-            /home/ubuntu/scripts/stop.sh || true
             /home/ubuntu/scripts/start.sh
 
-      # health — 이제 별도 세션이므로 'jober-app' 문자열 써도 안전
-      - name: Health check on EC2 (dynamic port)
-        uses: appleboy/ssh-action@v0.1.6
+      - name: Health check on EC2
+        uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
@@ -94,28 +104,62 @@ jobs:
           script: |
             set -euo pipefail
 
-            # 1) 로그에서 포트 추출 (우선)
-            PORT="$(grep -oP 'Tomcat started on port\(s\): \K[0-9]+' /home/ubuntu/jober-app.log 2>/dev/null | tail -1 || true)"
-
-            # 2) 못 찾으면 실제 리슨 소켓에서 포트 추출
-            if [ -z "${PORT}" ]; then
-              ADDR="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
-              [ -n "${ADDR}" ] && PORT="${ADDR##*:}"
-            fi
-
-            # 3) 그래도 없으면 SERVER_PORT / 기본 8080
-            [ -z "${PORT}" ] && PORT="${SERVER_PORT:-8080}"
-
-            # 4) 호스트 결정: 0.0.0.0이면 로컬호스트, 특정 IP로 바운드면 그 IP
+            PORT='${{ env.SERVER_PORT }}'
             HOST="127.0.0.1"
-            ADDR_LINE="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
-            if echo "${ADDR_LINE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:'; then
-              IP="${ADDR_LINE%:*}"
-              [ "${IP}" != "0.0.0.0" ] && HOST="${IP}"
-            fi
+            
+            echo "Health check: http://${HOST}:${PORT}/actuator/health"
 
-            echo "health: http://${HOST}:${PORT}/actuator/health"
-            curl -fsS "http://${HOST}:${PORT}/actuator/health" || echo "health check failed"
+            for i in {1..6}; do
+              if curl -fsS "http://${HOST}:${PORT}/actuator/health"; then
+                echo "Health check successful!"
+                tail -n 50 /home/ubuntu/jober-app.log || true
+                exit 0
+              fi
+              echo "Health check attempt $i failed. Retrying in 10 seconds..."
+              sleep 10
+            done
 
-            # 참고용 최근 로그
+            echo "Health check failed after multiple attempts."
             tail -n 120 /home/ubuntu/jober-app.log || true
+            exit 1
+
+  notify-to-slack:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: always()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine deployment status
+        id: status
+        run: |
+          if [[ '${{ needs.build-and-deploy.result }}' == 'success' ]]; then
+            echo "SLACK_COLOR=good" >> $GITHUB_ENV
+            echo "SLACK_ICON=:white_check_mark:" >> $GITHUB_ENV
+            echo "SLACK_TITLE=배포 성공" >> $GITHUB_ENV
+          else
+            echo "SLACK_COLOR=danger" >> $GITHUB_ENV
+            echo "SLACK_ICON=:x:" >> $GITHUB_ENV
+            echo "SLACK_TITLE=배포 실패" >> $GITHUB_ENV
+          fi
+
+      - name: Get commit information
+        id: commit
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s')
+          echo "COMMIT_MSG=$COMMIT_MSG" >> $GITHUB_ENV
+
+      - name: Send Slack Notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_COLOR: ${{ env.SLACK_COLOR }}
+          SLACK_ICON: ${{ env.SLACK_ICON }}
+          SLACK_TITLE: ${{ env.SLACK_TITLE }}
+          SLACK_MESSAGE: |
+            *Repository*: ${{ github.repository }}
+            *Commit*: `${{ env.COMMIT_MSG }}`
+            *Triggered by*: `${{ github.actor }}`
+            <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Click here to view the workflow run>
