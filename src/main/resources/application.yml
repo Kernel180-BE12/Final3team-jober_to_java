@@ -112,4 +112,5 @@ app:
       max-age-seconds: ${APP_COOKIE_MAX_AGE:1209600}
       path: ${APP_COOKIE_PATH:/api/auth}        
     csrf:
+      # enabled: false
       enabled: ${CSRF_ENABLED:true}

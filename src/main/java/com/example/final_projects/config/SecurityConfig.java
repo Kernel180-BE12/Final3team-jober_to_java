@@ -40,12 +40,11 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration c = new CorsConfiguration();
         c.setAllowedOrigins(List.of(
-                "http://localhost:3000", // dev
-                "http://localhost:5173", // vite dev server
-                "https://lee.telosform.shop", // vercel url
-                "https://www.telosform.shop", // vercel url
-                "https://final-team3-fe.vercel.app" // vercel url
-                //배포 url 넣어야함
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "https://lee.telosform.shop",
+                "https://www.telosform.shop",
+                "https://final-team3-fe.vercel.app"
         ));
         c.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         c.setAllowedHeaders(List.of("*"));
@@ -61,50 +60,56 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> {})
-                // CSRF: dev/prod 토글
                 .csrf(csrf -> {
                     if (!csrfEnabled) {
                         csrf.disable();
                     } else {
                         CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
-                        // 크로스사이트면 쿠키도 None+Secure (HTTPS 전제)
                         repo.setCookieCustomizer(c -> {
                             c.sameSite("None");
-                            c.secure(true);
+                            c.secure(false); // HTTP 환경이라 false, 운영 HTTPS는 true
                             c.path("/");
                         });
                         repo.setHeaderName("X-CSRF-Token");
                         csrf.csrfTokenRepository(repo)
                                 .ignoringRequestMatchers(
-                                        "/actuator/**",
-                                        "/swagger-ui/**", "/v3/api-docs/**"
+                                        // ✅ AntPathRequestMatcher 대신 새로운 DSL
+                                        request -> request.getRequestURI().startsWith("/api/auth/email/otp/")
+                                                && request.getMethod().equalsIgnoreCase("POST"),
+                                        request -> request.getRequestURI().equals("/api/auth/signup")
+                                                && request.getMethod().equalsIgnoreCase("POST"),
+                                        request -> request.getRequestURI().equals("/api/auth/login")
+                                                && request.getMethod().equalsIgnoreCase("POST"),
+                                        request -> request.getRequestURI().startsWith("/actuator/"),
+                                        request -> request.getRequestURI().startsWith("/swagger-ui/"),
+                                        request -> request.getRequestURI().startsWith("/v3/api-docs/")
                                 );
                     }
                 })
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 프리플라이트 전부 허용
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // 공개 경로 (로그인/가입/OTP/CSRF만 공개)
                         .requestMatchers(
                                 "/actuator/**",
                                 "/api/auth/csrf",
                                 "/api/auth/email/**",
+                                "/api/auth/signup",
+                                "/api/auth/login",
+                                "/api/auth/token/refresh",
+                                "/api/auth/logout",
                                 "/", "/index.html", "/favicon.ico",
                                 "/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**"
                         ).permitAll()
-                        .requestMatchers(
-                           "/admin/**"
-                        ).hasRole("ADMIN")
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
-                    .authenticationEntryPoint(new com.example.final_projects.security.UserAuthEntryPoint(objectMapper))
-                    .accessDeniedHandler(new com.example.final_projects.security.UserAccessDeniedHandler(objectMapper))
+                        .authenticationEntryPoint(new com.example.final_projects.security.UserAuthEntryPoint(objectMapper))
+                        .accessDeniedHandler(new com.example.final_projects.security.UserAccessDeniedHandler(objectMapper))
                 );
-        // JWT 필터 활성화: 예외는 EntryPoint/DeniedHandler가 통일 포맷으로 처리
-         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
