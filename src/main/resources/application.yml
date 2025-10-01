@@ -37,6 +37,7 @@ jwt:
   refresh-validity-ms: ${JWT_REFRESH_VALIDITY_MS:1209600000} # 기본값 14일
 
 security:
+  debug: true
   otp:
     pepper: ${OTP_PEPPER:}
     code-length: ${OTP_CODE_LENGTH:6}
@@ -88,6 +89,8 @@ logging:
     org.springframework.security: ${SECURITY_LOG_LEVEL:WARN}
     org.hibernate.SQL: ${SQL_LOG_LEVEL:WARN}
     org.hibernate.type.descriptor.sql.BasicBinder: ${SQL_PARAM_LOG_LEVEL:WARN}
+    com.example.final_projects.config.SwaggerCsrfBridgeFilter: DEBUG
+    org.springframework.security.web.csrf: DEBUG
 
 resilience4j:
   circuitbreaker:

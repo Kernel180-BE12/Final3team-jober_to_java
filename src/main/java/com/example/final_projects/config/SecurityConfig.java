@@ -11,10 +11,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
 import java.time.Duration;
 import java.util.List;
 
@@ -56,8 +60,11 @@ public class SecurityConfig {
         return src;
     }
 
+    // ★ 여기만 변경: SwaggerCsrfBridgeFilter 주입받고, CsrfFilter 앞에 삽입
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           SwaggerCsrfBridgeFilter swaggerCsrfBridgeFilter,
+                                           CookieFirstCsrfTokenRequestHandler cookieFirstCsrfTokenRequestHandler) throws Exception {
         http
                 .cors(cors -> {})
                 .csrf(csrf -> {
@@ -66,14 +73,15 @@ public class SecurityConfig {
                     } else {
                         CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
                         repo.setCookieCustomizer(c -> {
-                            c.sameSite("None");
-                            c.secure(false); // HTTP 환경이라 false, 운영 HTTPS는 true
+                            c.sameSite("Lax"); // 운영 Https 는 None
+                            c.secure(false); // 로컬/HTTP는 false, 운영 HTTPS는 true로!
                             c.path("/");
                         });
                         repo.setHeaderName("X-CSRF-Token");
-                        csrf.csrfTokenRepository(repo)
+                        csrf
+                                .csrfTokenRepository(repo)
+                                .csrfTokenRequestHandler(cookieFirstCsrfTokenRequestHandler)
                                 .ignoringRequestMatchers(
-                                        // ✅ AntPathRequestMatcher 대신 새로운 DSL
                                         request -> request.getRequestURI().startsWith("/api/auth/email/otp/")
                                                 && request.getMethod().equalsIgnoreCase("POST"),
                                         request -> request.getRequestURI().equals("/api/auth/signup")
@@ -86,6 +94,8 @@ public class SecurityConfig {
                                 );
                     }
                 })
+                // ★ 자동 주입 필터를 CsrfFilter 전에
+                .addFilterBefore(swaggerCsrfBridgeFilter, CsrfFilter.class)
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
