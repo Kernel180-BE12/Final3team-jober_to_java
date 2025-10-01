@@ -19,7 +19,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Build with Maven
-        run: mvn clean package -DskipTests
+        run: mvn clean package
 
       - name: Upload JAR to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -30,7 +30,6 @@ jobs:
           source: "target/*.jar,scripts/*"
           target: "/home/ubuntu/"
 
-      # 준비(줄바꿈/권한/JAR 확인) — 안전
       - name: Prepare scripts on EC2
         uses: appleboy/ssh-action@v0.1.6
         with:
@@ -43,7 +42,6 @@ jobs:
             chmod +x /home/ubuntu/scripts/*.sh
             ls -al /home/ubuntu/target/*.jar
 
-      # stop — 세션 끊겨도 통과
       - name: Stop application on EC2 (allow disconnect)
         uses: appleboy/ssh-action@v0.1.6
         continue-on-error: true
@@ -54,7 +52,6 @@ jobs:
           script: |
             /home/ubuntu/scripts/stop.sh || true
 
-      # start — 이 스텝에는 오직 start.sh만! (jober-app 들어간 명령 금지)
       - name: Restart application on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -62,7 +59,6 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # === 환경 변수 주입 ===
             export JWT_SECRET='${{ secrets.JWT_SECRET }}'
             export REFRESH_PEPPER='${{ secrets.REFRESH_PEPPER }}'
             export DB_URL='${{ secrets.DB_URL }}'
@@ -79,12 +75,10 @@ jobs:
             export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
             export SERVER_PORT='8080'
             
-            # === 스크립트 실행 ===
             chmod +x /home/ubuntu/scripts/*.sh
             /home/ubuntu/scripts/stop.sh || true
             /home/ubuntu/scripts/start.sh
 
-      # health — 이제 별도 세션이므로 'jober-app' 문자열 써도 안전
       - name: Health check on EC2 (dynamic port)
         uses: appleboy/ssh-action@v0.1.6
         with:
@@ -94,28 +88,26 @@ jobs:
           script: |
             set -euo pipefail
 
-            # 1) 로그에서 포트 추출 (우선)
             PORT="$(grep -oP 'Tomcat started on port\(s\): \K[0-9]+' /home/ubuntu/jober-app.log 2>/dev/null | tail -1 || true)"
-
-            # 2) 못 찾으면 실제 리슨 소켓에서 포트 추출
             if [ -z "${PORT}" ]; then
               ADDR="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
               [ -n "${ADDR}" ] && PORT="${ADDR##*:}"
             fi
-
-            # 3) 그래도 없으면 SERVER_PORT / 기본 8080
             [ -z "${PORT}" ] && PORT="${SERVER_PORT:-8080}"
-
-            # 4) 호스트 결정: 0.0.0.0이면 로컬호스트, 특정 IP로 바운드면 그 IP
             HOST="127.0.0.1"
-            ADDR_LINE="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
-            if echo "${ADDR_LINE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:'; then
-              IP="${ADDR_LINE%:*}"
-              [ "${IP}" != "0.0.0.0" ] && HOST="${IP}"
-            fi
+            
+            echo "Health check: http://${HOST}:${PORT}/actuator/health"
 
-            echo "health: http://${HOST}:${PORT}/actuator/health"
-            curl -fsS "http://${HOST}:${PORT}/actuator/health" || echo "health check failed"
+            for i in {1..6}; do
+              if curl -fsS "http://${HOST}:${PORT}/actuator/health"; then
+                echo "Health check successful!"
+                tail -n 50 /home/ubuntu/jober-app.log || true
+                exit 0
+              fi
+              echo "Health check attempt $i failed. Retrying in 10 seconds..."
+              sleep 10
+            done
 
-            # 참고용 최근 로그
+            echo "Health check failed after multiple attempts."
             tail -n 120 /home/ubuntu/jober-app.log || true
+            exit 1
