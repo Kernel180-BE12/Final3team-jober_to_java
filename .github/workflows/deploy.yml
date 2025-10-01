@@ -1,123 +1,121 @@
 name: CI/CD Spring Boot JAR to EC2
 
 on:
-    push:
-        branches: ["main", "chore/github-actions-pipeline"]
+  push:
+    branches: ["main", "chore/github-actions-pipeline"]
 
 jobs:
-    build-and-deploy:
-        runs-on: ubuntu-latest
+  build-and-deploy:
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Set up JDK 21
-              uses: actions/setup-java@v4
-              with:
-                  java-version: '21'
-                  distribution: 'temurin'
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
 
-            - name: Build with Maven
-              run: mvn clean package -DskipTests
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
 
-            - name: Upload JAR to EC2
-              uses: appleboy/scp-action@v0.1.7
-              with:
-                  host: ${{ secrets.EC2_HOST }}
-                  username: ubuntu
-                  key: ${{ secrets.EC2_SSH_KEY }}
-                  source: "target/*.jar,scripts/*"
-                  target: "/home/ubuntu/"
+      - name: Upload JAR to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "target/*.jar,scripts/*"
+          target: "/home/ubuntu/"
 
-            # 준비(줄바꿈/권한/JAR 확인) — 안전
-            - name: Prepare scripts on EC2
-              uses: appleboy/ssh-action@v0.1.6
-              with:
-                  host: ${{ secrets.EC2_HOST }}
-                  username: ubuntu
-                  key: ${{ secrets.EC2_SSH_KEY }}
-                  script: |
-                      set -e
-                      sed -i 's/\r$//' /home/ubuntu/scripts/*.sh || true
-                      chmod +x /home/ubuntu/scripts/*.sh
-                      ls -al /home/ubuntu/target/*.jar
+      # 준비(줄바꿈/권한/JAR 확인) — 안전
+      - name: Prepare scripts on EC2
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            sed -i 's/\r$//' /home/ubuntu/scripts/*.sh || true
+            chmod +x /home/ubuntu/scripts/*.sh
+            ls -al /home/ubuntu/target/*.jar
 
-            # stop — 세션 끊겨도 통과
-            - name: Stop application on EC2 (allow disconnect)
-              uses: appleboy/ssh-action@v0.1.6
-              continue-on-error: true
-              with:
-                  host: ${{ secrets.EC2_HOST }}
-                  username: ubuntu
-                  key: ${{ secrets.EC2_SSH_KEY }}
-                  script: |
-                      /home/ubuntu/scripts/stop.sh || true
+      # stop — 세션 끊겨도 통과
+      - name: Stop application on EC2 (allow disconnect)
+        uses: appleboy/ssh-action@v0.1.6
+        continue-on-error: true
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            /home/ubuntu/scripts/stop.sh || true
 
-            # start — 이 스텝에는 오직 start.sh만! (jober-app 들어간 명령 금지)
-            - name: Start application on EC2
-              uses: appleboy/ssh-action@v0.1.6
-              with:
-                host: ${{ secrets.EC2_HOST }}
-                username: ubuntu
-                key: ${{ secrets.EC2_SSH_KEY }}
-                envs: DB_URL,DB_USER,DB_PASS,JWT_SECRET,REFRESH_PEPPER,OTP_PEPPER,VERIFY_BASE_URL,AI_BASE_URL,CORS_ALLOWED_ORIGINS,APP_COOKIE_SAMESITE,APP_COOKIE_SECURE,APP_COOKIE_MAX_AGE,APP_COOKIE_PATH,CSRF_ENABLED,JAVA_TOOL_OPTIONS
-                script: |
-                  set -euo pipefail
-                  [ -n "${JWT_SECRET:-}" ] || { echo "JWT_SECRET missing"; exit 1; }
-                  [ -n "${REFRESH_PEPPER:-}" ] || { echo "REFRESH_PEPPER missing"; exit 1; }
-                  /home/ubuntu/scripts/start.sh
-              env:
-                DB_URL: ${{ secrets.DB_URL }}
-                DB_USER: ${{ secrets.DB_USER }}
-                DB_PASS: ${{ secrets.DB_PASS }}
-                JWT_SECRET: ${{ secrets.JWT_SECRET }}
-                REFRESH_PEPPER: ${{ secrets.REFRESH_PEPPER }}
-                OTP_PEPPER: ${{ secrets.OTP_PEPPER }}
-                VERIFY_BASE_URL: ${{ secrets.VERIFY_BASE_URL }}
-                AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
-                CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
-                APP_COOKIE_SAMESITE: ${{ secrets.APP_COOKIE_SAMESITE }}
-                APP_COOKIE_SECURE: ${{ secrets.APP_COOKIE_SECURE }}
-                APP_COOKIE_MAX_AGE: ${{ secrets.APP_COOKIE_MAX_AGE }}
-                APP_COOKIE_PATH: ${{ secrets.APP_COOKIE_PATH }}
-                CSRF_ENABLED: ${{ secrets.CSRF_ENABLED }}
-                JAVA_TOOL_OPTIONS: "-Djwt.secret=${{ secrets.JWT_SECRET }} -Dsecurity.refresh.pepper=${{ secrets.REFRESH_PEPPER }}"
+      # start — 이 스텝에는 오직 start.sh만! (jober-app 들어간 명령 금지)
+      - name: Restart application on EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # === 환경 변수 주입 ===
+            export JWT_SECRET='${{ secrets.JWT_SECRET }}'
+            export REFRESH_PEPPER='${{ secrets.REFRESH_PEPPER }}'
+            export DB_URL='${{ secrets.DB_URL }}'
+            export DB_USER='${{ secrets.DB_USER }}'
+            export DB_PASS='${{ secrets.DB_PASS }}'
+            export OTP_PEPPER='${{ secrets.OTP_PEPPER }}'
+            export VERIFY_BASE_URL='${{ secrets.VERIFY_BASE_URL }}'
+            export AI_BASE_URL='${{ secrets.AI_BASE_URL }}'
+            export CORS_ALLOWED_ORIGINS='${{ secrets.CORS_ALLOWED_ORIGINS }}'
+            export APP_COOKIE_SAMESITE='${{ secrets.APP_COOKIE_SAMESITE }}'
+            export APP_COOKIE_SECURE='${{ secrets.APP_COOKIE_SECURE }}'
+            export APP_COOKIE_MAX_AGE='${{ secrets.APP_COOKIE_MAX_AGE }}'
+            export APP_COOKIE_PATH='${{ secrets.APP_COOKIE_PATH }}'
+            export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
+            export SERVER_PORT='8080'
+            
+            # === 스크립트 실행 ===
+            chmod +x /home/ubuntu/scripts/*.sh
+            /home/ubuntu/scripts/stop.sh || true
+            /home/ubuntu/scripts/start.sh
 
+      # health — 이제 별도 세션이므로 'jober-app' 문자열 써도 안전
+      - name: Health check on EC2 (dynamic port)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
 
+            # 1) 로그에서 포트 추출 (우선)
+            PORT="$(grep -oP 'Tomcat started on port\(s\): \K[0-9]+' /home/ubuntu/jober-app.log 2>/dev/null | tail -1 || true)"
 
-          # health — 이제 별도 세션이므로 'jober-app' 문자열 써도 안전
-            - name: Health check on EC2 (dynamic port)
-              uses: appleboy/ssh-action@v0.1.6
-              with:
-                host: ${{ secrets.EC2_HOST }}
-                username: ubuntu
-                key: ${{ secrets.EC2_SSH_KEY }}
-                script: |
-                  set -euo pipefail
+            # 2) 못 찾으면 실제 리슨 소켓에서 포트 추출
+            if [ -z "${PORT}" ]; then
+              ADDR="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
+              [ -n "${ADDR}" ] && PORT="${ADDR##*:}"
+            fi
 
-                  # 1) 로그에서 포트 추출 (우선)
-                  PORT="$(grep -oP 'Tomcat started on port\(s\): \K[0-9]+' /home/ubuntu/jober-app.log 2>/dev/null | tail -1 || true)"
+            # 3) 그래도 없으면 SERVER_PORT / 기본 8080
+            [ -z "${PORT}" ] && PORT="${SERVER_PORT:-8080}"
 
-                  # 2) 못 찾으면 실제 리슨 소켓에서 포트 추출
-                  if [ -z "${PORT}" ]; then
-                    ADDR="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
-                    [ -n "${ADDR}" ] && PORT="${ADDR##*:}"
-                  fi
+            # 4) 호스트 결정: 0.0.0.0이면 로컬호스트, 특정 IP로 바운드면 그 IP
+            HOST="127.0.0.1"
+            ADDR_LINE="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
+            if echo "${ADDR_LINE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:'; then
+              IP="${ADDR_LINE%:*}"
+              [ "${IP}" != "0.0.0.0" ] && HOST="${IP}"
+            fi
 
-                  # 3) 그래도 없으면 SERVER_PORT / 기본 8080
-                  [ -z "${PORT}" ] && PORT="${SERVER_PORT:-8080}"
+            echo "health: http://${HOST}:${PORT}/actuator/health"
+            curl -fsS "http://${HOST}:${PORT}/actuator/health" || echo "health check failed"
 
-                  # 4) 호스트 결정: 0.0.0.0이면 로컬호스트, 특정 IP로 바운드면 그 IP
-                  HOST="127.0.0.1"
-                  ADDR_LINE="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
-                  if echo "${ADDR_LINE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:'; then
-                    IP="${ADDR_LINE%:*}"
-                    [ "${IP}" != "0.0.0.0" ] && HOST="${IP}"
-                  fi
-
-                  echo "health: http://${HOST}:${PORT}/actuator/health"
-                  curl -fsS "http://${HOST}:${PORT}/actuator/health" || echo "health check failed"
-
-                  # 참고용 최근 로그
-                  tail -n 120 /home/ubuntu/jober-app.log || true
+            # 참고용 최근 로그
+            tail -n 120 /home/ubuntu/jober-app.log || true
