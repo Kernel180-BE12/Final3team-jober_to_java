@@ -8,6 +8,9 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      SERVER_PORT: ${{ vars.SERVER_PORT || '8080' }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -73,11 +76,11 @@ jobs:
             export APP_COOKIE_MAX_AGE='${{ secrets.APP_COOKIE_MAX_AGE }}'
             export APP_COOKIE_PATH='${{ secrets.APP_COOKIE_PATH }}'
             export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
-            export SERVER_PORT='8080'
+            export SERVER_PORT='${{ env.SERVER_PORT }}'
             
             /home/ubuntu/scripts/start.sh
 
-      - name: Health check on EC2 (dynamic port)
+      - name: Health check on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -86,12 +89,7 @@ jobs:
           script: |
             set -euo pipefail
 
-            PORT="$(grep -oP 'Tomcat started on port\(s\): \K[0-9]+' /home/ubuntu/jober-app.log 2>/dev/null | tail -1 || true)"
-            if [ -z "${PORT}" ]; then
-              ADDR="$(sudo ss -ltnp | awk '/java/ && /LISTEN/ {print $4}' | tail -1 || true)"
-              [ -n "${ADDR}" ] && PORT="${ADDR##*:}"
-            fi
-            [ -z "${PORT}" ] && PORT="${SERVER_PORT:-8080}"
+            PORT='${{ env.SERVER_PORT }}'
             HOST="127.0.0.1"
             
             echo "Health check: http://${HOST}:${PORT}/actuator/health"
