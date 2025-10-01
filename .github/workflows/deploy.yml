@@ -31,7 +31,7 @@ jobs:
           target: "/home/ubuntu/"
 
       - name: Prepare scripts on EC2
-        uses: appleboy/ssh-action@v0.1.6
+        uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
@@ -43,7 +43,7 @@ jobs:
             ls -al /home/ubuntu/target/*.jar
 
       - name: Stop application on EC2 (allow disconnect)
-        uses: appleboy/ssh-action@v0.1.6
+        uses: appleboy/ssh-action@v1.0.0
         continue-on-error: true
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -78,7 +78,7 @@ jobs:
             /home/ubuntu/scripts/start.sh
 
       - name: Health check on EC2 (dynamic port)
-        uses: appleboy/ssh-action@v0.1.6
+        uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
