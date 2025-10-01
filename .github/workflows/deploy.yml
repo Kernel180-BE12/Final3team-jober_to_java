@@ -52,7 +52,7 @@ jobs:
           script: |
             /home/ubuntu/scripts/stop.sh || true
 
-      - name: Restart application on EC2
+      - name: Start application on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -75,8 +75,6 @@ jobs:
             export CSRF_ENABLED='${{ secrets.CSRF_ENABLED }}'
             export SERVER_PORT='8080'
             
-            chmod +x /home/ubuntu/scripts/*.sh
-            /home/ubuntu/scripts/stop.sh || true
             /home/ubuntu/scripts/start.sh
 
       - name: Health check on EC2 (dynamic port)
